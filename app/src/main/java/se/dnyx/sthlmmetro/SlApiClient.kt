@@ -1,0 +1,193 @@
+package se.dnyx.sthlmmetro
+
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
+import java.time.Duration
+import java.time.LocalDateTime
+
+enum class LineBadgeStyle {
+    RED, GREEN, BLUE, PENDEL, ROSLAG, TRAM, CYAN
+}
+
+data class DepartureItem(
+    val designation: String,
+    val destination: String,
+    val display: String,
+    val clockTime: String,
+    val modeLabel: String,
+    val delayMinutes: Int,
+    val cancelled: Boolean,
+    val badgeStyle: LineBadgeStyle
+)
+
+data class StationOption(
+    val siteId: Int,
+    val name: String,
+    val subtitle: String = ""
+)
+
+object SlApiClient {
+    private const val BASE_URL = "https://transport.integration.sl.se/v1"
+
+    val POPULAR_STATIONS = listOf(
+        StationOption(9001, "T-Centralen", "Metro Red/Green/Blue · Pendeltåg"),
+        StationOption(9192, "Slussen", "Metro Red/Green · Buses"),
+        StationOption(9189, "Gullmarsplan", "Metro Green · Tvärbanan"),
+        StationOption(9203, "Universitetet", "Metro Red 14 · Roslagsbanan"),
+        StationOption(9600, "Stockholms östra", "Roslagsbanan 27/28/29 · KTH"),
+        StationOption(9220, "Ropsten", "Metro Red 13 · Lidingöbanan 21"),
+        StationOption(9293, "Liljeholmen", "Metro Red 13/14 · Tvärbanan"),
+        StationOption(9112, "Alvik", "Metro Green · Tvärbanan · Line 12"),
+        StationOption(9305, "Västra skogen", "Metro Blue 10/11"),
+        StationOption(9529, "Älvsjö", "Pendeltåg 40–48"),
+        StationOption(9509, "Solna", "Pendeltåg · Tvärbanan"),
+        StationOption(9109, "Brommaplan", "Metro Green · Buses"),
+        StationOption(7006, "Flemingsberg", "Pendeltåg · Campus")
+    )
+
+    private fun httpGet(urlStr: String, timeoutMs: Int = 9000): String {
+        val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = timeoutMs
+            readTimeout = timeoutMs
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("User-Agent", "SthlmMetroRadarAndroid/1.0")
+        }
+        try {
+            val code = conn.responseCode
+            if (code !in 200..299) {
+                throw IllegalStateException("HTTP $code")
+            }
+            BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { reader ->
+                val sb = StringBuilder()
+                var line = reader.readLine()
+                while (line != null) {
+                    sb.append(line)
+                    line = reader.readLine()
+                }
+                return sb.toString()
+            }
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    fun fetchDepartures(siteId: Int, includeBuses: Boolean, limit: Int = 4): List<DepartureItem> {
+        val raw = httpGet("$BASE_URL/sites/$siteId/departures?forecast=45")
+        val root = JSONObject(raw)
+        val arr = root.optJSONArray("departures") ?: return emptyList()
+
+        val allItems = mutableListOf<Pair<String, DepartureItem>>()
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            val line = obj.optJSONObject("line") ?: continue
+            val mode = line.optString("transport_mode", "").uppercase()
+            val designation = line.optString("designation", "SL").trim().uppercase()
+            val destination = obj.optString("destination", "Stockholm").trim()
+            val displayRaw = obj.optString("display", "").trim()
+            val expected = obj.optString("expected", "")
+            val scheduled = obj.optString("scheduled", expected)
+            val state = obj.optString("state", "").uppercase()
+            val cancelled = state == "CANCELLED"
+
+            val clockTime = extractClock(expected.ifEmpty { scheduled })
+            val display = when {
+                cancelled -> "—"
+                displayRaw.equals("Nu", ignoreCase = true) -> "NOW"
+                displayRaw.isNotEmpty() -> displayRaw
+                else -> clockTime
+            }
+
+            val delayMin = computeDelayMinutes(scheduled, expected)
+            val badgeStyle = resolveBadgeStyle(mode, designation)
+            val modeLabel = resolveModeLabel(mode, designation)
+
+            allItems.add(
+                mode to DepartureItem(
+                    designation = designation.ifEmpty { "SL" },
+                    destination = destination.ifEmpty { "Stockholm" },
+                    display = display,
+                    clockTime = clockTime,
+                    modeLabel = modeLabel,
+                    delayMinutes = delayMin,
+                    cancelled = cancelled,
+                    badgeStyle = badgeStyle
+                )
+            )
+        }
+
+        val railModes = setOf("METRO", "TRAIN", "TRAM")
+        val railOnly = allItems.filter { it.first in railModes }.map { it.second }
+        val chosen = if (includeBuses || railOnly.isEmpty()) {
+            allItems.map { it.second }
+        } else {
+            railOnly
+        }
+        return chosen.take(limit)
+    }
+
+    fun fetchAllSites(): List<StationOption> {
+        val raw = httpGet("$BASE_URL/sites", timeoutMs = 14000)
+        val arr = JSONArray(raw)
+        val out = ArrayList<StationOption>(arr.length())
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            val id = obj.optInt("id", -1)
+            val name = obj.optString("name", "").trim()
+            if (id > 0 && name.isNotEmpty()) {
+                out.add(StationOption(id, name, "Site #$id"))
+            }
+        }
+        return out
+    }
+
+    private fun extractClock(iso: String): String {
+        val tIdx = iso.indexOf('T')
+        if (tIdx >= 0 && iso.length >= tIdx + 6) {
+            return iso.substring(tIdx + 1, tIdx + 6)
+        }
+        return ""
+    }
+
+    private fun computeDelayMinutes(scheduled: String, expected: String): Int {
+        if (scheduled.length < 19 || expected.length < 19) return 0
+        return try {
+            val s = LocalDateTime.parse(scheduled.substring(0, 19))
+            val e = LocalDateTime.parse(expected.substring(0, 19))
+            val secs = Duration.between(s, e).seconds
+            if (secs >= 60) (secs / 60).toInt() else 0
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    private fun resolveBadgeStyle(mode: String, designation: String): LineBadgeStyle {
+        val base = designation.replace(Regex("[SXNV]$"), "")
+        return when {
+            base in setOf("13", "14") && mode == "METRO" -> LineBadgeStyle.RED
+            base in setOf("17", "18", "19") && mode == "METRO" -> LineBadgeStyle.GREEN
+            base in setOf("10", "11") && mode == "METRO" -> LineBadgeStyle.BLUE
+            base in setOf("27", "28", "29") -> LineBadgeStyle.ROSLAG
+            mode == "TRAIN" || base in setOf("40", "41", "42", "43", "44", "48") -> LineBadgeStyle.PENDEL
+            mode == "TRAM" || base in setOf("7", "12", "21", "30", "31") -> LineBadgeStyle.TRAM
+            else -> LineBadgeStyle.CYAN
+        }
+    }
+
+    private fun resolveModeLabel(mode: String, designation: String): String {
+        val base = designation.replace(Regex("[SXNV]$"), "")
+        return when {
+            base in setOf("27", "28", "29") -> "Roslagsbanan"
+            mode == "METRO" -> "Tunnelbana"
+            mode == "TRAIN" -> "Pendeltåg"
+            mode == "TRAM" -> "Tram"
+            mode == "BUS" -> "Bus"
+            mode == "SHIP" -> "Ferry"
+            else -> "SL"
+        }
+    }
+}

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">STHLM Metro Radar</string>
+    <string name="widget_name">STHLM Live Departures</string>
+    <string name="widget_description">Live Stockholm SL train &amp; tram departures with 1-tap refresh and 3D radar launch.</string>
+    <string name="config_title">Select SL Station</string>
+</resources>
