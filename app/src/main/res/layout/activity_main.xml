@@ -19,4 +19,22 @@
         android:layout_gravity="center"
         android:indeterminateTint="@color/cyan_accent" />
 
+    <TextView
+        android:id="@+id/btn_app_update"
+        android:layout_width="wrap_content"
+        android:layout_height="32dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="12dp"
+        android:background="@drawable/update_pill_idle"
+        android:elevation="6dp"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:paddingStart="11dp"
+        android:paddingEnd="11dp"
+        android:text="↓ v1.3"
+        android:textColor="@color/cyan_accent"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+
 </FrameLayout>

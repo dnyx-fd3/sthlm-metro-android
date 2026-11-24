@@ -92,7 +92,6 @@
             android:textSize="13sp"
             android:textStyle="bold" />
 
-        <!-- Walk buffer stepper -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -182,7 +181,7 @@
             android:background="@drawable/btn_secondary_bg"
             android:fontFamily="monospace"
             android:gravity="center"
-            android:text="◎ OPEN 3D METRO RADAR"
+            android:text="◎ OPEN T-RADAR 3D MAP"
             android:textColor="@color/text_primary"
             android:textSize="12sp"
             android:textStyle="bold" />

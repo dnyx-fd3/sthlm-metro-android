@@ -14,6 +14,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.ProgressBar
+import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -27,6 +28,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var spinner: ProgressBar
+    private lateinit var updatePill: TextView
     private var pendingGeoOrigin: String? = null
     private var pendingGeoCallback: GeolocationPermissions.Callback? = null
 
@@ -60,8 +62,24 @@ class MainActivity : AppCompatActivity() {
 
         webView = findViewById(R.id.radar_webview)
         spinner = findViewById(R.id.loading_spinner)
-        webView.setBackgroundColor(Color.parseColor("#030914"))
+        updatePill = findViewById(R.id.btn_app_update)
+        updatePill.text = "↓ v${BuildConfig.VERSION_NAME}"
+        updatePill.setOnClickListener { AppUpdater.showUpdateDialog(this) }
 
+        // Silent background check so pill lights up bright cyan when a newer APK is published
+        AppUpdater.checkInBackground { info ->
+            if (info?.isNewer == true) {
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) {
+                        updatePill.setBackgroundResource(R.drawable.update_pill_ready)
+                        updatePill.setTextColor(ContextCompat.getColor(this, R.color.bg_dark))
+                        updatePill.text = "⬇ Update ready"
+                    }
+                }
+            }
+        }
+
+        webView.setBackgroundColor(Color.parseColor("#030914"))
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -146,6 +164,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val RADAR_URL = "https://sthlm-under.lovable.app/"
+        private const val RADAR_URL = "https://sthlm-under.lovable.app/?platform=android"
     }
 }

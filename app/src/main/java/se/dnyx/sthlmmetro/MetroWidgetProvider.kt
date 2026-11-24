@@ -54,7 +54,6 @@ class MetroWidgetProvider : AppWidgetProvider() {
         }
         if (ids.isEmpty()) return
 
-        // Pure local rollover (0 network calls): shifts departed buses off & reveals cat when list empties
         if (action == ACTION_LOCAL_TICK) {
             for (id in ids) {
                 val cfg = WidgetPrefs.load(context, id)
@@ -74,15 +73,24 @@ class MetroWidgetProvider : AppWidgetProvider() {
             WidgetPrefs.setActiveSlot(context, widgetId, slotIndex)
         }
 
-        // Instant visual feedback without wiping current rows on refresh
+        // Anti-spam 5s debounce on manual refresh for the same stop to keep SL traffic gentle
+        val nowMs = System.currentTimeMillis()
+        val idsToFetch = mutableListOf<Int>()
+
         for (id in ids) {
             val cfg = WidgetPrefs.load(context, id)
             val cached = WidgetPrefs.loadCache(context, id, cfg.activeSlotIndex)
-            val hasWarmCache = cached != null &&
+            val cacheMatches = cached != null &&
                 cached.siteId == cfg.activeSlot.siteId &&
-                cached.filterCode == cfg.activeSlot.filter.code &&
-                action == ACTION_REFRESH
-            if (hasWarmCache) {
+                cached.filterCode == cfg.activeSlot.filter.code
+
+            if (action == ACTION_REFRESH && cacheMatches && (nowMs - cached!!.fetchedAtMs) < REFRESH_COOLDOWN_MS) {
+                renderFromCache(context, appWidgetManager, id, cfg, cached)
+                continue
+            }
+
+            idsToFetch.add(id)
+            if (action == ACTION_REFRESH && cacheMatches) {
                 val partial = RemoteViews(context.packageName, R.layout.widget_departures)
                 partial.setTextViewText(R.id.widget_updated_at, "Refreshing live SL…")
                 appWidgetManager.partiallyUpdateAppWidget(id, partial)
@@ -96,10 +104,12 @@ class MetroWidgetProvider : AppWidgetProvider() {
             }
         }
 
+        if (idsToFetch.isEmpty()) return
+
         val pendingResult = goAsync()
         executor.execute {
             try {
-                for (id in ids) {
+                for (id in idsToFetch) {
                     refreshWidgetBlocking(context, appWidgetManager, id)
                 }
             } finally {
@@ -120,12 +130,14 @@ class MetroWidgetProvider : AppWidgetProvider() {
         const val ACTION_SELECT_SLOT = "se.dnyx.sthlmmetro.ACTION_SELECT_SLOT"
         const val ACTION_LOCAL_TICK = "se.dnyx.sthlmmetro.ACTION_LOCAL_TICK"
         const val EXTRA_SLOT_INDEX = "slot_index"
+        private const val REFRESH_COOLDOWN_MS = 5_000L
 
         private val executor = Executors.newSingleThreadExecutor()
         private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
         private val TAB_IDS = intArrayOf(R.id.widget_tab_0, R.id.widget_tab_1, R.id.widget_tab_2)
         private val ROW_IDS = intArrayOf(R.id.row_0, R.id.row_1, R.id.row_2, R.id.row_3)
+        private val ROW_BG_IDS = intArrayOf(R.id.row_0_bg, R.id.row_1_bg, R.id.row_2_bg, R.id.row_3_bg)
         private val BADGE_IDS = intArrayOf(R.id.row_0_badge, R.id.row_1_badge, R.id.row_2_badge, R.id.row_3_badge)
         private val DEST_IDS = intArrayOf(R.id.row_0_dest, R.id.row_1_dest, R.id.row_2_dest, R.id.row_3_dest)
         private val SUB_IDS = intArrayOf(R.id.row_0_sub, R.id.row_1_sub, R.id.row_2_sub, R.id.row_3_sub)
@@ -158,6 +170,17 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 )
                 val cache = CachedSlotDepartures(active.siteId, active.filter.code, fetchedAtMs, fetched)
                 renderFromCache(context, appWidgetManager, appWidgetId, cfg, cache)
+            } catch (_: SlRateLimitException) {
+                val views = buildBaseViews(context, appWidgetId, cfg)
+                views.setTextViewText(R.id.widget_updated_at, "SL 429 limit · Wait & tap ↻")
+                views.setViewVisibility(R.id.widget_cat_empty, View.GONE)
+                views.setViewVisibility(R.id.widget_status_text, View.VISIBLE)
+                views.setTextViewText(R.id.widget_status_text, "SL rate limit hit (429). Wait a moment and tap ↻.")
+                for (i in 0 until 4) {
+                    views.setViewVisibility(ROW_IDS[i], View.GONE)
+                }
+                cancelLocalRollover(context, appWidgetId)
+                appWidgetManager.updateAppWidget(appWidgetId, views)
             } catch (_: Exception) {
                 val views = buildBaseViews(context, appWidgetId, cfg)
                 views.setTextViewText(R.id.widget_updated_at, "Offline · Tap ↻ to retry")
@@ -196,13 +219,11 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 .format(timeFmt)
             val modeTag = if (active.filter != ModeFilter.AUTO) " · ${active.filter.label}" else ""
 
-            // Keep only departures that haven't passed yet (10s grace for boarding)
             val upcoming = cache.items.filter { d ->
                 d.expectedEpochMs <= 0L || d.expectedEpochMs > nowMs - 10_000L
             }
 
             if (upcoming.isEmpty()) {
-                // Inactivity / all cached buses departed -> show roaming cat pointing to ↻!
                 views.setTextViewText(R.id.widget_updated_at, "Last sync $syncClock$modeTag")
                 views.setViewVisibility(R.id.widget_status_text, View.GONE)
                 views.setViewVisibility(R.id.widget_cat_empty, View.VISIBLE)
@@ -254,7 +275,6 @@ class MetroWidgetProvider : AppWidgetProvider() {
                         else -> accentColor
                     }
 
-                    // Live ticking local countdown via native Android Chronometer!
                     if (!d.cancelled && remainingMs in 6_000L..3_599_000L) {
                         views.setViewVisibility(CHRONO_IDS[i], View.VISIBLE)
                         views.setViewVisibility(ETA_IDS[i], View.GONE)
@@ -284,7 +304,6 @@ class MetroWidgetProvider : AppWidgetProvider() {
                         }
                     }
 
-                    // Tap this departure row -> open walk-buffer reminder dialog
                     val remIntent = Intent(context, DepartureReminderActivity::class.java).apply {
                         putExtra(DepartureReminderActivity.EXTRA_WIDGET_ID, appWidgetId)
                         putExtra(DepartureReminderActivity.EXTRA_SLOT_INDEX, cfg.activeSlotIndex)
@@ -353,6 +372,16 @@ class MetroWidgetProvider : AppWidgetProvider() {
             val active = cfg.activeSlot
             views.setTextViewText(R.id.widget_station_name, "${active.stationName} ▾")
 
+            // Apply user-configured background opacity (0%–100%) to container & inner cards
+            val bgAlpha = ((cfg.opacityPercent.coerceIn(0, 100) * 255) / 100)
+            // Keep inner cards subtly frosted even at low opacity for legibility, fully transparent at 0%
+            val cardAlpha = if (cfg.opacityPercent == 0) 0 else ((bgAlpha * 0.85f).toInt().coerceAtLeast(36))
+            views.setInt(R.id.widget_bg_image, "setImageAlpha", bgAlpha)
+            views.setInt(R.id.widget_cat_bg, "setImageAlpha", cardAlpha)
+            for (rowBgId in ROW_BG_IDS) {
+                views.setInt(rowBgId, "setImageAlpha", cardAlpha)
+            }
+
             val tabActiveText = ContextCompat.getColor(context, R.color.widget_tab_active_text)
             val tabIdleText = ContextCompat.getColor(context, R.color.widget_text_secondary)
 
@@ -391,7 +420,6 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 views.setViewVisibility(R.id.widget_tabs_bar, View.GONE)
             }
 
-            // Tap ↻ (or the cat card!) -> immediate SL refresh
             val refreshIntent = Intent(context, MetroWidgetProvider::class.java).apply {
                 action = ACTION_REFRESH
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
@@ -405,7 +433,6 @@ class MetroWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widget_refresh_btn, refreshPi)
             views.setOnClickPendingIntent(R.id.widget_cat_empty, refreshPi)
 
-            // Tap station title -> open 3-stop configurator
             val configIntent = Intent(context, WidgetConfigActivity::class.java).apply {
                 action = AppWidgetManager.ACTION_APPWIDGET_CONFIGURE
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
@@ -419,7 +446,6 @@ class MetroWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_header_tap, configPi)
 
-            // Tap "3D" button (or status text) -> launch fullscreen 3D Stockholm Metro Radar
             val launchIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             }

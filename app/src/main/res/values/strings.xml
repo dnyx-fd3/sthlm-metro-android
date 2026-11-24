@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">STHLM Metro Radar</string>
-    <string name="widget_name">STHLM Live Departures</string>
-    <string name="widget_description">Track up to 3 Stockholm SL stops with live ticking countdowns, walk-buffer timers, and Material You styling.</string>
-    <string name="config_title">Configure Commute Stops</string>
+    <string name="app_name">T-Radar</string>
+    <string name="widget_name">T-Radar Live</string>
+    <string name="widget_description">Track up to 3 Stockholm SL stops with live ticking countdowns, walk-buffer reminders, and custom opacity.</string>
+    <string name="config_title">T-Radar Widget Setup</string>
 </resources>

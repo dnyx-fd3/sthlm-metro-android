@@ -7,24 +7,52 @@
     android:orientation="vertical"
     android:padding="16dp">
 
-    <TextView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:fontFamily="monospace"
-        android:letterSpacing="0.12"
-        android:text="STHLM METRO RADAR"
-        android:textColor="@color/cyan_accent"
-        android:textSize="11sp"
-        android:textStyle="bold" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:text="Pick up to 3 commute stops"
-        android:textColor="@color/text_primary"
-        android:textSize="19sp"
-        android:textStyle="bold" />
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.14"
+                android:text="T-RADAR"
+                android:textColor="@color/cyan_accent"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:text="Pick up to 3 commute stops"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/config_update_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:background="@drawable/update_pill_idle"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="↓ Update"
+            android:textColor="@color/cyan_accent"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/config_subtitle"
@@ -33,13 +61,13 @@
         android:layout_marginTop="2dp"
         android:text="e.g. Lappis bus → Universitetet metro → Pendeltåg"
         android:textColor="@color/text_secondary"
-        android:textSize="12sp" />
+        android:textSize="11sp" />
 
     <!-- 3 Commute Stop Slots -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="10dp"
         android:orientation="horizontal">
 
         <LinearLayout
@@ -50,7 +78,7 @@
             android:layout_weight="1"
             android:background="@drawable/slot_pill_active"
             android:orientation="vertical"
-            android:padding="9dp">
+            android:padding="8dp">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -93,7 +121,7 @@
             android:layout_weight="1"
             android:background="@drawable/slot_pill_idle"
             android:orientation="vertical"
-            android:padding="9dp">
+            android:padding="8dp">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -135,7 +163,7 @@
             android:layout_weight="1"
             android:background="@drawable/slot_pill_idle"
             android:orientation="vertical"
-            android:padding="9dp">
+            android:padding="8dp">
 
             <TextView
                 android:layout_width="wrap_content"
@@ -175,7 +203,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="9dp"
+        android:layout_marginTop="8dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
@@ -265,37 +293,37 @@
         android:id="@+id/config_walk_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="7dp"
         android:background="@drawable/config_row_bg"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="12dp"
-        android:paddingTop="6dp"
+        android:paddingTop="5dp"
         android:paddingEnd="8dp"
-        android:paddingBottom="6dp">
+        android:paddingBottom="5dp">
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Default reminder before arrival"
+            android:text="Walk reminder buffer"
             android:textColor="@color/text_secondary"
             android:textSize="12sp" />
 
         <TextView
             android:id="@+id/config_walk_minus"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
             android:background="@drawable/chip_idle"
             android:gravity="center"
             android:text="−"
             android:textColor="@color/text_primary"
-            android:textSize="16sp"
+            android:textSize="15sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/config_walk_value"
-            android:layout_width="50dp"
+            android:layout_width="48dp"
             android:layout_height="wrap_content"
             android:fontFamily="monospace"
             android:gravity="center"
@@ -306,21 +334,65 @@
 
         <TextView
             android:id="@+id/config_walk_plus"
-            android:layout_width="30dp"
-            android:layout_height="30dp"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
             android:background="@drawable/chip_idle"
             android:gravity="center"
             android:text="+"
             android:textColor="@color/text_primary"
-            android:textSize="16sp"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Widget Background Opacity Slider (0% - 100%) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="7dp"
+        android:background="@drawable/config_row_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="5dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="5dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Widget opacity"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <SeekBar
+            android:id="@+id/config_opacity_seek"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1"
+            android:max="100"
+            android:progress="100"
+            android:progressTint="@color/cyan_accent"
+            android:thumbTint="@color/cyan_accent" />
+
+        <TextView
+            android:id="@+id/config_opacity_value"
+            android:layout_width="40dp"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:gravity="end"
+            android:text="100%"
+            android:textColor="@color/cyan_accent"
+            android:textSize="12sp"
             android:textStyle="bold" />
     </LinearLayout>
 
     <EditText
         android:id="@+id/station_search_input"
         android:layout_width="match_parent"
-        android:layout_height="44dp"
-        android:layout_marginTop="9dp"
+        android:layout_height="42dp"
+        android:layout_marginTop="8dp"
         android:background="@drawable/input_bg"
         android:hint="Search stop for Stop 1 (e.g. Lappkärrsberget, Odenplan…)"
         android:imeOptions="actionSearch"
@@ -336,7 +408,7 @@
         android:id="@+id/station_list_view"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="9dp"
+        android:layout_marginTop="8dp"
         android:layout_weight="1"
         android:divider="@android:color/transparent"
         android:dividerHeight="7dp" />
@@ -344,8 +416,8 @@
     <TextView
         android:id="@+id/btn_save_widget"
         android:layout_width="match_parent"
-        android:layout_height="46dp"
-        android:layout_marginTop="10dp"
+        android:layout_height="44dp"
+        android:layout_marginTop="8dp"
         android:background="@drawable/btn_save_bg"
         android:fontFamily="monospace"
         android:gravity="center"

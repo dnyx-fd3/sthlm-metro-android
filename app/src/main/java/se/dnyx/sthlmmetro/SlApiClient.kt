@@ -11,6 +11,8 @@ import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
 
+class SlRateLimitException : Exception("SL HTTP 429 rate limit")
+
 enum class LineBadgeStyle {
     RED, GREEN, BLUE, PENDEL, ROSLAG, TRAM, BUS_BLUE, BUS_RED, CYAN
 }
@@ -66,10 +68,13 @@ object SlApiClient {
             connectTimeout = timeoutMs
             readTimeout = timeoutMs
             setRequestProperty("Accept", "application/json")
-            setRequestProperty("User-Agent", "SthlmMetroRadarAndroid/1.2")
+            setRequestProperty("User-Agent", "TRadarAndroid/${BuildConfig.VERSION_NAME}")
         }
         try {
             val code = conn.responseCode
+            if (code == 429) {
+                throw SlRateLimitException()
+            }
             if (code !in 200..299) {
                 throw IllegalStateException("HTTP $code")
             }

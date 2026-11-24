@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- App / Config / Reminder Dialog dark radar palette -->
     <color name="bg_dark">#030914</color>
     <color name="card_bg">#050D1A</color>
     <color name="row_bg">#0B172A</color>
@@ -10,7 +9,6 @@
     <color name="amber_warn">#FBBF24</color>
     <color name="rose_cancel">#FB7185</color>
 
-    <!-- Widget Light fallback (Android 8-11) -->
     <color name="widget_surface">#F8FAFC</color>
     <color name="widget_card">#EDF2F7</color>
     <color name="widget_tab_idle">#E2E8F0</color>

@@ -25,7 +25,8 @@ data class StationSlot(
 
 data class WidgetConfig(
     val slots: List<StationSlot>,
-    val activeSlotIndex: Int
+    val activeSlotIndex: Int,
+    val opacityPercent: Int = 100
 ) {
     val activeSlot: StationSlot
         get() = slots.getOrElse(activeSlotIndex) {
@@ -45,8 +46,11 @@ object WidgetPrefs {
     private const val CACHE_PREFS_NAME = "sthlm_metro_widget_cache"
     private const val KEY_SLOTS_JSON = "slots_json_"
     private const val KEY_ACTIVE_SLOT = "active_slot_"
+    private const val KEY_OPACITY = "opacity_pct_"
+    private const val KEY_SITES_JSON = "cached_sites_json"
+    private const val KEY_SITES_FETCHED_MS = "cached_sites_fetched_ms"
+    private const val SITES_CACHE_TTL_MS = 7L * 24L * 60L * 60L * 1000L
 
-    // Legacy v1.0 keys
     private const val LEGACY_SITE_ID = "site_id_"
     private const val LEGACY_STATION_NAME = "station_name_"
     private const val LEGACY_INCLUDE_BUSES = "include_buses_"
@@ -54,7 +58,13 @@ object WidgetPrefs {
     const val DEFAULT_SITE_ID = 9001
     const val DEFAULT_STATION_NAME = "T-Centralen"
 
-    fun saveSlots(context: Context, appWidgetId: Int, slots: List<StationSlot>, activeIndex: Int = 0) {
+    fun saveSlots(
+        context: Context,
+        appWidgetId: Int,
+        slots: List<StationSlot>,
+        activeIndex: Int = 0,
+        opacityPercent: Int = 100
+    ) {
         val clean = slots.take(3).ifEmpty {
             listOf(StationSlot(DEFAULT_SITE_ID, DEFAULT_STATION_NAME, ModeFilter.AUTO, 3))
         }
@@ -69,9 +79,11 @@ object WidgetPrefs {
             )
         }
         val safeIdx = activeIndex.coerceIn(0, clean.lastIndex)
+        val safeOpacity = opacityPercent.coerceIn(0, 100)
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putString(KEY_SLOTS_JSON + appWidgetId, arr.toString())
             .putInt(KEY_ACTIVE_SLOT + appWidgetId, safeIdx)
+            .putInt(KEY_OPACITY + appWidgetId, safeOpacity)
             .apply()
     }
 
@@ -89,11 +101,12 @@ object WidgetPrefs {
         val updated = cfg.slots.mapIndexed { idx, slot ->
             if (idx == slotIndex) slot.copy(walkMinutes = walkMinutes.coerceIn(0, 30)) else slot
         }
-        saveSlots(context, appWidgetId, updated, cfg.activeSlotIndex)
+        saveSlots(context, appWidgetId, updated, cfg.activeSlotIndex, cfg.opacityPercent)
     }
 
     fun load(context: Context, appWidgetId: Int): WidgetConfig {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val opacity = prefs.getInt(KEY_OPACITY + appWidgetId, 100).coerceIn(0, 100)
         val rawJson = prefs.getString(KEY_SLOTS_JSON + appWidgetId, null)
         if (!rawJson.isNullOrBlank()) {
             try {
@@ -111,7 +124,7 @@ object WidgetPrefs {
                 }
                 if (parsed.isNotEmpty()) {
                     val active = prefs.getInt(KEY_ACTIVE_SLOT + appWidgetId, 0).coerceIn(0, parsed.lastIndex)
-                    return WidgetConfig(parsed.take(3), active)
+                    return WidgetConfig(parsed.take(3), active, opacity)
                 }
             } catch (_: Exception) {
                 // Fall through to legacy/default
@@ -124,8 +137,42 @@ object WidgetPrefs {
         val legacyFilter = if (legacyBuses) ModeFilter.ALL else ModeFilter.AUTO
         return WidgetConfig(
             slots = listOf(StationSlot(legacyId, legacyName, legacyFilter, 3)),
-            activeSlotIndex = 0
+            activeSlotIndex = 0,
+            opacityPercent = opacity
         )
+    }
+
+    fun saveSitesCache(context: Context, sites: List<StationOption>) {
+        val arr = JSONArray()
+        for (s in sites) {
+            arr.put(JSONObject().put("id", s.siteId).put("n", s.name))
+        }
+        context.getSharedPreferences(CACHE_PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putString(KEY_SITES_JSON, arr.toString())
+            .putLong(KEY_SITES_FETCHED_MS, System.currentTimeMillis())
+            .apply()
+    }
+
+    fun loadFreshSitesCache(context: Context): List<StationOption>? {
+        val prefs = context.getSharedPreferences(CACHE_PREFS_NAME, Context.MODE_PRIVATE)
+        val fetchedAt = prefs.getLong(KEY_SITES_FETCHED_MS, 0L)
+        if (System.currentTimeMillis() - fetchedAt > SITES_CACHE_TTL_MS) return null
+        val raw = prefs.getString(KEY_SITES_JSON, null) ?: return null
+        return try {
+            val arr = JSONArray(raw)
+            val out = ArrayList<StationOption>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val id = o.optInt("id", -1)
+                val name = o.optString("n", "")
+                if (id > 0 && name.isNotEmpty()) {
+                    out.add(StationOption(id, name, "SL Site #$id"))
+                }
+            }
+            out.takeIf { it.isNotEmpty() }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun saveCache(
@@ -204,6 +251,7 @@ object WidgetPrefs {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .remove(KEY_SLOTS_JSON + appWidgetId)
             .remove(KEY_ACTIVE_SLOT + appWidgetId)
+            .remove(KEY_OPACITY + appWidgetId)
             .remove(LEGACY_SITE_ID + appWidgetId)
             .remove(LEGACY_STATION_NAME + appWidgetId)
             .remove(LEGACY_INCLUDE_BUSES + appWidgetId)

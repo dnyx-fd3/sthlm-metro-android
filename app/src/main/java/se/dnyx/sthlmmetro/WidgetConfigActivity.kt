@@ -12,6 +12,7 @@ import android.widget.BaseAdapter
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ListView
+import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -26,6 +27,7 @@ class WidgetConfigActivity : AppCompatActivity() {
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
     private val slots = arrayOfNulls<StationSlot>(3)
     private var editingIndex = 0
+    private var opacityPercent = 100
 
     private var allSites: List<StationOption> = SlApiClient.POPULAR_STATIONS
     private var displayedSites: List<StationOption> = SlApiClient.POPULAR_STATIONS
@@ -36,6 +38,9 @@ class WidgetConfigActivity : AppCompatActivity() {
     private lateinit var clearSlotBtn: TextView
     private lateinit var walkBar: View
     private lateinit var walkValueText: TextView
+    private lateinit var opacitySeek: SeekBar
+    private lateinit var opacityValueText: TextView
+    private lateinit var updateBtn: TextView
     private lateinit var slotContainers: List<LinearLayout>
     private lateinit var slotLabels: List<TextView>
     private lateinit var slotModes: List<TextView>
@@ -84,12 +89,29 @@ class WidgetConfigActivity : AppCompatActivity() {
             slots[0] = StationSlot(WidgetPrefs.DEFAULT_SITE_ID, WidgetPrefs.DEFAULT_STATION_NAME, ModeFilter.AUTO, 3)
         }
         editingIndex = existing.activeSlotIndex.coerceIn(0, 2)
+        opacityPercent = existing.opacityPercent.coerceIn(0, 100)
 
         searchInput = findViewById(R.id.station_search_input)
         subtitleView = findViewById(R.id.config_subtitle)
         clearSlotBtn = findViewById(R.id.btn_clear_slot)
         walkBar = findViewById(R.id.config_walk_bar)
         walkValueText = findViewById(R.id.config_walk_value)
+        opacitySeek = findViewById(R.id.config_opacity_seek)
+        opacityValueText = findViewById(R.id.config_opacity_value)
+        updateBtn = findViewById(R.id.config_update_btn)
+
+        updateBtn.setOnClickListener { AppUpdater.showUpdateDialog(this) }
+
+        opacitySeek.progress = opacityPercent
+        opacityValueText.text = "$opacityPercent%"
+        opacitySeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                opacityPercent = progress.coerceIn(0, 100)
+                opacityValueText.text = "$opacityPercent%"
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        })
 
         slotContainers = listOf(
             findViewById(R.id.slot_btn_0),
@@ -175,7 +197,13 @@ class WidgetConfigActivity : AppCompatActivity() {
             val finalSlots = nonEmpty.ifEmpty {
                 listOf(StationSlot(WidgetPrefs.DEFAULT_SITE_ID, WidgetPrefs.DEFAULT_STATION_NAME, ModeFilter.AUTO, 3))
             }
-            WidgetPrefs.saveSlots(this, appWidgetId, finalSlots, activeIndex = 0)
+            WidgetPrefs.saveSlots(
+                context = this,
+                appWidgetId = appWidgetId,
+                slots = finalSlots,
+                activeIndex = 0,
+                opacityPercent = opacityPercent
+            )
             MetroWidgetProvider.triggerAsyncRefresh(this, appWidgetId)
 
             val result = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
@@ -193,21 +221,44 @@ class WidgetConfigActivity : AppCompatActivity() {
 
         renderSlotUI()
 
-        Executors.newSingleThreadExecutor().execute {
-            try {
-                val remoteSites = SlApiClient.fetchAllSites()
-                if (remoteSites.isNotEmpty()) {
-                    val popularIds = SlApiClient.POPULAR_STATIONS.map { it.siteId }.toSet()
-                    val merged = SlApiClient.POPULAR_STATIONS +
-                        remoteSites.filter { it.siteId !in popularIds }.sortedBy { it.name.lowercase() }
-                    runOnUiThread {
-                        allSites = merged
-                        subtitleView.text = "Search ${remoteSites.size} SL bus stops, metro & pendeltåg stations"
-                        filterList(searchInput.text?.toString().orEmpty())
+        // Silently check for app update to highlight Update pill if a new APK exists
+        AppUpdater.checkInBackground { info ->
+            if (info?.isNewer == true) {
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) {
+                        updateBtn.setBackgroundResource(R.drawable.update_pill_ready)
+                        updateBtn.setTextColor(ContextCompat.getColor(this, R.color.bg_dark))
+                        updateBtn.text = "⬇ Update!"
                     }
                 }
-            } catch (_: Exception) {
-                // Keep curated hubs available offline
+            }
+        }
+
+        // Load SL sites from 7-day local cache first to avoid hammering /v1/sites
+        Executors.newSingleThreadExecutor().execute {
+            val cachedSites = WidgetPrefs.loadFreshSitesCache(this)
+            val remoteSites = if (cachedSites != null) {
+                cachedSites
+            } else {
+                try {
+                    val fresh = SlApiClient.fetchAllSites()
+                    if (fresh.isNotEmpty()) {
+                        WidgetPrefs.saveSitesCache(this, fresh)
+                    }
+                    fresh
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            }
+            if (remoteSites.isNotEmpty()) {
+                val popularIds = SlApiClient.POPULAR_STATIONS.map { it.siteId }.toSet()
+                val merged = SlApiClient.POPULAR_STATIONS +
+                    remoteSites.filter { it.siteId !in popularIds }.sortedBy { it.name.lowercase() }
+                runOnUiThread {
+                    allSites = merged
+                    subtitleView.text = "Search ${remoteSites.size} SL bus stops, metro & pendeltåg stations"
+                    filterList(searchInput.text?.toString().orEmpty())
+                }
             }
         }
     }
