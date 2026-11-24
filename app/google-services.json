@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "638315750378",
+    "project_id": "t-radar-53ccc",
+    "storage_bucket": "t-radar-53ccc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:638315750378:android:ce66f0575d2e1b822a8893",
+        "android_client_info": {
+          "package_name": "se.dnyx.sthlmmetro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7WIfgZWxTXlDUHpZCvoteIjiOrF68uPs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
