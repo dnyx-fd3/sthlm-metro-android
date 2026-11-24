@@ -22,6 +22,7 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
+import java.util.Locale
 import java.util.concurrent.Executors
 
 data class ReleaseInfo(
@@ -83,8 +84,7 @@ object AppUpdater {
 
             if (info == null) {
                 titleView.text = "Couldn't check releases"
-                bodyView.text = "Installed: T-Radar v${BuildConfig.VERSION_NAME}
-Check your connection or open GitHub Releases below."
+                bodyView.text = "Installed: T-Radar v${BuildConfig.VERSION_NAME}\nCheck your connection or open GitHub Releases below."
                 primaryBtn.text = "↻ TRY AGAIN"
                 primaryBtn.setOnClickListener {
                     titleView.text = "Checking GitHub Releases…"
@@ -97,15 +97,14 @@ Check your connection or open GitHub Releases below."
             }
 
             val sizeMb = if (info.apkSizeBytes > 0) {
-                String.format("%.1f MB", info.apkSizeBytes / (1024.0 * 1024.0))
+                String.format(Locale.US, "%.1f MB", info.apkSizeBytes / (1024.0 * 1024.0))
             } else {
                 "APK"
             }
 
             if (info.isNewer && !info.apkDownloadUrl.isNullOrEmpty()) {
                 titleView.text = "Update ready (${info.tagName})"
-                bodyView.text = "Installed: v${BuildConfig.VERSION_NAME}
-Latest build: ${info.tagName} ($sizeMb)"
+                bodyView.text = "Installed: v${BuildConfig.VERSION_NAME}\nLatest build: ${info.tagName} ($sizeMb)"
                 primaryBtn.text = "⬇ DOWNLOAD & INSTALL"
                 primaryBtn.setOnClickListener {
                     startApkDownloadAndInstall(
@@ -120,8 +119,7 @@ Latest build: ${info.tagName} ($sizeMb)"
                 }
             } else {
                 titleView.text = "You're up to date!"
-                bodyView.text = "Installed: T-Radar v${BuildConfig.VERSION_NAME}
-Latest GitHub build: ${info.tagName}"
+                bodyView.text = "Installed: T-Radar v${BuildConfig.VERSION_NAME}\nLatest GitHub build: ${info.tagName}"
                 primaryBtn.text = if (!info.apkDownloadUrl.isNullOrEmpty()) {
                     "↻ RE-DOWNLOAD LATEST ($sizeMb)"
                 } else {
@@ -148,7 +146,6 @@ Latest GitHub build: ${info.tagName}"
 
         dialog.show()
 
-        // Always perform a fresh check when user explicitly taps the Update button
         titleView.text = "Checking GitHub Releases…"
         bodyView.text = "Installed: T-Radar v${BuildConfig.VERSION_NAME}"
         progressBar.isIndeterminate = true
@@ -245,7 +242,7 @@ Latest GitHub build: ${info.tagName}"
                     if (dialog.isShowing) dialog.dismiss()
                     launchInstaller(activity, outFile)
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 activity.runOnUiThread {
                     if (!dialog.isShowing) return@runOnUiThread
                     progressBar.visibility = View.GONE
@@ -315,7 +312,6 @@ Latest GitHub build: ${info.tagName}"
                     }
                 }
 
-                // A release published >5 minutes after this APK was compiled is genuinely newer
                 val isNewer = publishedMs > (BuildConfig.BUILD_TIME_MS + 5L * 60L * 1000L)
 
                 ReleaseInfo(
