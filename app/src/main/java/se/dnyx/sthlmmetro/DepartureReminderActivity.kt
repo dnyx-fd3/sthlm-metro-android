@@ -42,6 +42,7 @@ class DepartureReminderActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AnalyticsHelper.syncCollectionState(this)
         setContentView(R.layout.activity_departure_reminder)
 
         appWidgetId = intent.getIntExtra(EXTRA_WIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
@@ -52,6 +53,14 @@ class DepartureReminderActivity : AppCompatActivity() {
         clockTime = intent.getStringExtra(EXTRA_CLOCK_TIME).orEmpty()
         expectedEpochMs = intent.getLongExtra(EXTRA_EXPECTED_EPOCH_MS, 0L)
         walkMinutes = intent.getIntExtra(EXTRA_WALK_MINUTES, 3).coerceIn(0, 30)
+
+        AnalyticsHelper.logDepartureTapped(
+            context = this,
+            stationName = stationName,
+            lineNumber = designation,
+            destination = destination,
+            walkMinutes = walkMinutes
+        )
 
         val styleName = intent.getStringExtra(EXTRA_BADGE_STYLE) ?: "CYAN"
         val badgeStyle = LineBadgeStyle.entries.firstOrNull { it.name == styleName } ?: LineBadgeStyle.CYAN
@@ -92,6 +101,8 @@ class DepartureReminderActivity : AppCompatActivity() {
         findViewById<View>(R.id.rem_btn_open_radar).setOnClickListener {
             startActivity(
                 Intent(this, MainActivity::class.java).apply {
+                    putExtra(MainActivity.EXTRA_LAUNCH_SOURCE, "reminder_dialog")
+                    putExtra(MainActivity.EXTRA_STATION_NAME, stationName)
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 }
             )
@@ -147,7 +158,7 @@ class DepartureReminderActivity : AppCompatActivity() {
 
         if (expectedEpochMs <= 0L || remainingSec <= 0) {
             if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                MetroWidgetProvider.triggerAsyncRefresh(this, appWidgetId)
+                MetroWidgetProvider.triggerAsyncRefresh(this, appWidgetId, trigger = "reminder_stale")
             }
             Toast.makeText(this, "Refreshing live SL departures…", Toast.LENGTH_SHORT).show()
             finish()
@@ -173,6 +184,14 @@ class DepartureReminderActivity : AppCompatActivity() {
         }
         try {
             startActivity(intent)
+            AnalyticsHelper.logReminderSet(
+                context = this,
+                stationName = stationName,
+                lineNumber = designation,
+                destination = destination,
+                walkMinutes = walkMinutes,
+                timerSeconds = timerSec
+            )
             Toast.makeText(
                 this,
                 "Timer set for ${formatDuration(timerSec)}: $designation → $destination",

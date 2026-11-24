@@ -14,6 +14,7 @@ import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -28,11 +29,14 @@ class WidgetConfigActivity : AppCompatActivity() {
     private val slots = arrayOfNulls<StationSlot>(3)
     private var editingIndex = 0
     private var opacityPercent = 100
+    private var brandTapCount = 0
+    private var lastBrandTapMs = 0L
 
     private var allSites: List<StationOption> = SlApiClient.POPULAR_STATIONS
     private var displayedSites: List<StationOption> = SlApiClient.POPULAR_STATIONS
     private lateinit var adapter: StationAdapter
 
+    private lateinit var brandTitleView: TextView
     private lateinit var searchInput: EditText
     private lateinit var subtitleView: TextView
     private lateinit var clearSlotBtn: TextView
@@ -48,6 +52,8 @@ class WidgetConfigActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AnalyticsHelper.syncCollectionState(this)
+
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setResult(RESULT_CANCELED)
         setContentView(R.layout.activity_widget_config)
@@ -91,6 +97,7 @@ class WidgetConfigActivity : AppCompatActivity() {
         editingIndex = existing.activeSlotIndex.coerceIn(0, 2)
         opacityPercent = existing.opacityPercent.coerceIn(0, 100)
 
+        brandTitleView = findViewById(R.id.config_brand_title)
         searchInput = findViewById(R.id.station_search_input)
         subtitleView = findViewById(R.id.config_subtitle)
         clearSlotBtn = findViewById(R.id.btn_clear_slot)
@@ -100,7 +107,27 @@ class WidgetConfigActivity : AppCompatActivity() {
         opacityValueText = findViewById(R.id.config_opacity_value)
         updateBtn = findViewById(R.id.config_update_btn)
 
-        updateBtn.setOnClickListener { AppUpdater.showUpdateDialog(this) }
+        renderBrandHeader()
+
+        // Hidden Tester Mode: tap "T-RADAR" 5 times quickly (or long-press Update)
+        brandTitleView.setOnClickListener {
+            val now = System.currentTimeMillis()
+            if (now - lastBrandTapMs > 1500L) {
+                brandTapCount = 0
+            }
+            lastBrandTapMs = now
+            brandTapCount++
+            if (brandTapCount >= 5) {
+                brandTapCount = 0
+                toggleTesterMode()
+            }
+        }
+
+        updateBtn.setOnClickListener { AppUpdater.showUpdateDialog(this, source = "config") }
+        updateBtn.setOnLongClickListener {
+            toggleTesterMode()
+            true
+        }
 
         opacitySeek.progress = opacityPercent
         opacityValueText.text = "$opacityPercent%"
@@ -188,6 +215,7 @@ class WidgetConfigActivity : AppCompatActivity() {
                 filter = cur?.filter ?: ModeFilter.AUTO,
                 walkMinutes = cur?.walkMinutes ?: 3
             )
+            AnalyticsHelper.logStationPicked(this, picked.name, picked.siteId, editingIndex)
             searchInput.setText("")
             renderSlotUI()
         }
@@ -204,7 +232,8 @@ class WidgetConfigActivity : AppCompatActivity() {
                 activeIndex = 0,
                 opacityPercent = opacityPercent
             )
-            MetroWidgetProvider.triggerAsyncRefresh(this, appWidgetId)
+            AnalyticsHelper.logWidgetConfigured(this, finalSlots, opacityPercent)
+            MetroWidgetProvider.triggerAsyncRefresh(this, appWidgetId, trigger = "config_save")
 
             val result = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             setResult(RESULT_OK, result)
@@ -221,7 +250,6 @@ class WidgetConfigActivity : AppCompatActivity() {
 
         renderSlotUI()
 
-        // Silently check for app update to highlight Update pill if a new APK exists
         AppUpdater.checkInBackground { info ->
             if (info?.isNewer == true) {
                 runOnUiThread {
@@ -234,7 +262,6 @@ class WidgetConfigActivity : AppCompatActivity() {
             }
         }
 
-        // Load SL sites from 7-day local cache first to avoid hammering /v1/sites
         Executors.newSingleThreadExecutor().execute {
             val cachedSites = WidgetPrefs.loadFreshSitesCache(this)
             val remoteSites = if (cachedSites != null) {
@@ -260,6 +287,25 @@ class WidgetConfigActivity : AppCompatActivity() {
                     filterList(searchInput.text?.toString().orEmpty())
                 }
             }
+        }
+    }
+
+    private fun toggleTesterMode() {
+        val excluded = AnalyticsHelper.toggleDevExcluded(this)
+        renderBrandHeader()
+        val msg = if (excluded) {
+            "Tester Mode ON — Your taps are hidden from GA4 & Firebase"
+        } else {
+            "Tester Mode OFF — Analytics resumed on this device"
+        }
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+    }
+
+    private fun renderBrandHeader() {
+        brandTitleView.text = if (AnalyticsHelper.isDevExcluded(this)) {
+            "T-RADAR · 🧪 TESTER (NO GA4)"
+        } else {
+            "T-RADAR"
         }
     }
 

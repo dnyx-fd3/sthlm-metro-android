@@ -68,6 +68,7 @@
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="se.dnyx.sthlmmetro.ACTION_REFRESH_WIDGET" />
+                <action android:name="se.dnyx.sthlmmetro.ACTION_CAT_POKE" />
                 <action android:name="se.dnyx.sthlmmetro.ACTION_SELECT_SLOT" />
                 <action android:name="se.dnyx.sthlmmetro.ACTION_LOCAL_TICK" />
             </intent-filter>

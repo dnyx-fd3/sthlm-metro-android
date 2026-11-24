@@ -19,6 +19,7 @@ import java.util.concurrent.Executors
 class MetroWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+        AnalyticsHelper.syncCollectionState(context)
         val pendingResult = goAsync()
         executor.execute {
             try {
@@ -29,9 +30,9 @@ class MetroWidgetProvider : AppWidgetProvider() {
                         cached.siteId == cfg.activeSlot.siteId &&
                         cached.filterCode == cfg.activeSlot.filter.code
                     if (cacheMatches) {
-                        renderFromCache(context, appWidgetManager, widgetId, cfg, cached!!)
+                        renderFromCache(context, appWidgetManager, widgetId, cfg, cached!!, logEmptyCat = false)
                     } else {
-                        refreshWidgetBlocking(context, appWidgetManager, widgetId)
+                        refreshWidgetBlocking(context, appWidgetManager, widgetId, trigger = "system")
                     }
                 }
             } finally {
@@ -43,7 +44,13 @@ class MetroWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         val action = intent.action ?: return
-        if (action != ACTION_REFRESH && action != ACTION_SELECT_SLOT && action != ACTION_LOCAL_TICK) return
+        if (action != ACTION_REFRESH &&
+            action != ACTION_CAT_POKE &&
+            action != ACTION_SELECT_SLOT &&
+            action != ACTION_LOCAL_TICK
+        ) return
+
+        AnalyticsHelper.syncCollectionState(context)
 
         val widgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
         val appWidgetManager = AppWidgetManager.getInstance(context)
@@ -62,7 +69,7 @@ class MetroWidgetProvider : AppWidgetProvider() {
                     cached.siteId == cfg.activeSlot.siteId &&
                     cached.filterCode == cfg.activeSlot.filter.code
                 ) {
-                    renderFromCache(context, appWidgetManager, id, cfg, cached)
+                    renderFromCache(context, appWidgetManager, id, cfg, cached, logEmptyCat = true)
                 }
             }
             return
@@ -71,11 +78,17 @@ class MetroWidgetProvider : AppWidgetProvider() {
         if (action == ACTION_SELECT_SLOT && widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
             val slotIndex = intent.getIntExtra(EXTRA_SLOT_INDEX, 0)
             WidgetPrefs.setActiveSlot(context, widgetId, slotIndex)
+            val updatedCfg = WidgetPrefs.load(context, widgetId)
+            AnalyticsHelper.logWidgetTabSwitched(context, updatedCfg.activeSlot, updatedCfg.activeSlotIndex)
         }
 
-        // Anti-spam 5s debounce on manual refresh for the same stop to keep SL traffic gentle
         val nowMs = System.currentTimeMillis()
         val idsToFetch = mutableListOf<Int>()
+        val triggerLabel = when (action) {
+            ACTION_CAT_POKE -> "cat"
+            ACTION_SELECT_SLOT -> "tab"
+            else -> "button"
+        }
 
         for (id in ids) {
             val cfg = WidgetPrefs.load(context, id)
@@ -84,8 +97,15 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 cached.siteId == cfg.activeSlot.siteId &&
                 cached.filterCode == cfg.activeSlot.filter.code
 
-            if (action == ACTION_REFRESH && cacheMatches && (nowMs - cached!!.fetchedAtMs) < REFRESH_COOLDOWN_MS) {
-                renderFromCache(context, appWidgetManager, id, cfg, cached)
+            if (action == ACTION_CAT_POKE) {
+                AnalyticsHelper.logWidgetCatPoked(context, cfg.activeSlot)
+            }
+
+            if ((action == ACTION_REFRESH || action == ACTION_CAT_POKE) &&
+                cacheMatches &&
+                (nowMs - cached!!.fetchedAtMs) < REFRESH_COOLDOWN_MS
+            ) {
+                renderFromCache(context, appWidgetManager, id, cfg, cached, logEmptyCat = false)
                 continue
             }
 
@@ -110,7 +130,7 @@ class MetroWidgetProvider : AppWidgetProvider() {
         executor.execute {
             try {
                 for (id in idsToFetch) {
-                    refreshWidgetBlocking(context, appWidgetManager, id)
+                    refreshWidgetBlocking(context, appWidgetManager, id, trigger = triggerLabel)
                 }
             } finally {
                 pendingResult.finish()
@@ -127,6 +147,7 @@ class MetroWidgetProvider : AppWidgetProvider() {
 
     companion object {
         const val ACTION_REFRESH = "se.dnyx.sthlmmetro.ACTION_REFRESH_WIDGET"
+        const val ACTION_CAT_POKE = "se.dnyx.sthlmmetro.ACTION_CAT_POKE"
         const val ACTION_SELECT_SLOT = "se.dnyx.sthlmmetro.ACTION_SELECT_SLOT"
         const val ACTION_LOCAL_TICK = "se.dnyx.sthlmmetro.ACTION_LOCAL_TICK"
         const val EXTRA_SLOT_INDEX = "slot_index"
@@ -145,16 +166,22 @@ class MetroWidgetProvider : AppWidgetProvider() {
         private val ETA_IDS = intArrayOf(R.id.row_0_eta, R.id.row_1_eta, R.id.row_2_eta, R.id.row_3_eta)
         private val CLOCK_IDS = intArrayOf(R.id.row_0_clock, R.id.row_1_clock, R.id.row_2_clock, R.id.row_3_clock)
 
-        fun triggerAsyncRefresh(context: Context, appWidgetId: Int) {
+        fun triggerAsyncRefresh(context: Context, appWidgetId: Int, trigger: String = "config_save") {
             val appWidgetManager = AppWidgetManager.getInstance(context)
             executor.execute {
-                refreshWidgetBlocking(context, appWidgetManager, appWidgetId)
+                refreshWidgetBlocking(context, appWidgetManager, appWidgetId, trigger = trigger)
             }
         }
 
-        fun refreshWidgetBlocking(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int) {
+        fun refreshWidgetBlocking(
+            context: Context,
+            appWidgetManager: AppWidgetManager,
+            appWidgetId: Int,
+            trigger: String = "button"
+        ) {
             val cfg = WidgetPrefs.load(context, appWidgetId)
             val active = cfg.activeSlot
+            AnalyticsHelper.logWidgetRefreshed(context, active, cfg.activeSlotIndex, trigger)
 
             try {
                 val fetched = SlApiClient.fetchDepartures(active.siteId, active.filter, limit = 20)
@@ -169,8 +196,9 @@ class MetroWidgetProvider : AppWidgetProvider() {
                     items = fetched
                 )
                 val cache = CachedSlotDepartures(active.siteId, active.filter.code, fetchedAtMs, fetched)
-                renderFromCache(context, appWidgetManager, appWidgetId, cfg, cache)
+                renderFromCache(context, appWidgetManager, appWidgetId, cfg, cache, logEmptyCat = true)
             } catch (_: SlRateLimitException) {
+                AnalyticsHelper.logSlError(context, active, "429_rate_limit")
                 val views = buildBaseViews(context, appWidgetId, cfg)
                 views.setTextViewText(R.id.widget_updated_at, "SL 429 limit · Wait & tap ↻")
                 views.setViewVisibility(R.id.widget_cat_empty, View.GONE)
@@ -182,6 +210,7 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 cancelLocalRollover(context, appWidgetId)
                 appWidgetManager.updateAppWidget(appWidgetId, views)
             } catch (_: Exception) {
+                AnalyticsHelper.logSlError(context, active, "network")
                 val views = buildBaseViews(context, appWidgetId, cfg)
                 views.setTextViewText(R.id.widget_updated_at, "Offline · Tap ↻ to retry")
                 views.setViewVisibility(R.id.widget_cat_empty, View.GONE)
@@ -200,7 +229,8 @@ class MetroWidgetProvider : AppWidgetProvider() {
             appWidgetManager: AppWidgetManager,
             appWidgetId: Int,
             cfg: WidgetConfig,
-            cache: CachedSlotDepartures
+            cache: CachedSlotDepartures,
+            logEmptyCat: Boolean
         ) {
             val active = cfg.activeSlot
             val views = buildBaseViews(context, appWidgetId, cfg)
@@ -224,6 +254,9 @@ class MetroWidgetProvider : AppWidgetProvider() {
             }
 
             if (upcoming.isEmpty()) {
+                if (logEmptyCat) {
+                    AnalyticsHelper.logWidgetCatShown(context, active)
+                }
                 views.setTextViewText(R.id.widget_updated_at, "Last sync $syncClock$modeTag")
                 views.setViewVisibility(R.id.widget_status_text, View.GONE)
                 views.setViewVisibility(R.id.widget_cat_empty, View.VISIBLE)
@@ -372,9 +405,7 @@ class MetroWidgetProvider : AppWidgetProvider() {
             val active = cfg.activeSlot
             views.setTextViewText(R.id.widget_station_name, "${active.stationName} ▾")
 
-            // Apply user-configured background opacity (0%–100%) to container & inner cards
             val bgAlpha = ((cfg.opacityPercent.coerceIn(0, 100) * 255) / 100)
-            // Keep inner cards subtly frosted even at low opacity for legibility, fully transparent at 0%
             val cardAlpha = if (cfg.opacityPercent == 0) 0 else ((bgAlpha * 0.85f).toInt().coerceAtLeast(36))
             views.setInt(R.id.widget_bg_image, "setImageAlpha", bgAlpha)
             views.setInt(R.id.widget_cat_bg, "setImageAlpha", cardAlpha)
@@ -420,6 +451,7 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 views.setViewVisibility(R.id.widget_tabs_bar, View.GONE)
             }
 
+            // Tap ↻ -> refresh
             val refreshIntent = Intent(context, MetroWidgetProvider::class.java).apply {
                 action = ACTION_REFRESH
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
@@ -431,7 +463,19 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.widget_refresh_btn, refreshPi)
-            views.setOnClickPendingIntent(R.id.widget_cat_empty, refreshPi)
+
+            // Tap roaming cat -> cat poke + refresh
+            val catIntent = Intent(context, MetroWidgetProvider::class.java).apply {
+                action = ACTION_CAT_POKE
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            }
+            val catPi = PendingIntent.getBroadcast(
+                context,
+                appWidgetId * 50 + 5,
+                catIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(R.id.widget_cat_empty, catPi)
 
             val configIntent = Intent(context, WidgetConfigActivity::class.java).apply {
                 action = AppWidgetManager.ACTION_APPWIDGET_CONFIGURE
@@ -446,17 +490,19 @@ class MetroWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_header_tap, configPi)
 
-            val launchIntent = Intent(context, MainActivity::class.java).apply {
+            val launch3dIntent = Intent(context, MainActivity::class.java).apply {
+                putExtra(MainActivity.EXTRA_LAUNCH_SOURCE, "widget_3d")
+                putExtra(MainActivity.EXTRA_STATION_NAME, active.stationName)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
-            val launchPi = PendingIntent.getActivity(
+            val launch3dPi = PendingIntent.getActivity(
                 context,
                 appWidgetId * 50 + 3,
-                launchIntent,
+                launch3dIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            views.setOnClickPendingIntent(R.id.widget_radar_btn, launchPi)
-            views.setOnClickPendingIntent(R.id.widget_status_text, launchPi)
+            views.setOnClickPendingIntent(R.id.widget_radar_btn, launch3dPi)
+            views.setOnClickPendingIntent(R.id.widget_status_text, launch3dPi)
 
             return views
         }

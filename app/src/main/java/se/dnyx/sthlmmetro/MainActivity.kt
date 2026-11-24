@@ -15,6 +15,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -29,6 +30,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var spinner: ProgressBar
     private lateinit var updatePill: TextView
+    private var updateAvailable = false
     private var pendingGeoOrigin: String? = null
     private var pendingGeoCallback: GeolocationPermissions.Callback? = null
 
@@ -44,6 +46,8 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AnalyticsHelper.syncCollectionState(this)
+
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
 
@@ -63,17 +67,32 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.radar_webview)
         spinner = findViewById(R.id.loading_spinner)
         updatePill = findViewById(R.id.btn_app_update)
-        updatePill.text = "↓ v${BuildConfig.VERSION_NAME}"
-        updatePill.setOnClickListener { AppUpdater.showUpdateDialog(this) }
+        renderUpdatePill()
 
-        // Silent background check so pill lights up bright cyan when a newer APK is published
+        updatePill.setOnClickListener {
+            AppUpdater.showUpdateDialog(this, source = "main")
+        }
+
+        // Hidden Tester Mode toggle: long-press the version pill to pause/resume GA4 on this phone
+        updatePill.setOnLongClickListener {
+            val excluded = AnalyticsHelper.toggleDevExcluded(this)
+            renderUpdatePill()
+            val msg = if (excluded) {
+                "Tester Mode ON — Your taps are hidden from GA4 & Firebase"
+            } else {
+                "Tester Mode OFF — Analytics resumed on this device"
+            }
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+            webView.loadUrl(buildRadarUrl())
+            true
+        }
+
         AppUpdater.checkInBackground { info ->
             if (info?.isNewer == true) {
                 runOnUiThread {
                     if (!isFinishing && !isDestroyed) {
-                        updatePill.setBackgroundResource(R.drawable.update_pill_ready)
-                        updatePill.setTextColor(ContextCompat.getColor(this, R.color.bg_dark))
-                        updatePill.text = "⬇ Update ready"
+                        updateAvailable = true
+                        renderUpdatePill()
                     }
                 }
             }
@@ -151,10 +170,50 @@ class MainActivity : AppCompatActivity() {
         })
 
         if (savedInstanceState == null) {
-            webView.loadUrl(RADAR_URL)
+            logLaunchIntent(intent)
+            webView.loadUrl(buildRadarUrl())
         } else {
             webView.restoreState(savedInstanceState)
             spinner.visibility = View.GONE
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        logLaunchIntent(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        AnalyticsHelper.syncCollectionState(this)
+        renderUpdatePill()
+    }
+
+    private fun logLaunchIntent(launchIntent: Intent?) {
+        val source = launchIntent?.getStringExtra(EXTRA_LAUNCH_SOURCE) ?: "launcher"
+        val station = launchIntent?.getStringExtra(EXTRA_STATION_NAME).orEmpty()
+        AnalyticsHelper.logRadarOpened(this, source = source, stationName = station)
+    }
+
+    private fun buildRadarUrl(): String {
+        return if (AnalyticsHelper.isDevExcluded(this)) {
+            "$RADAR_URL&dev=1"
+        } else {
+            RADAR_URL
+        }
+    }
+
+    private fun renderUpdatePill() {
+        val dev = AnalyticsHelper.isDevExcluded(this)
+        if (updateAvailable) {
+            updatePill.setBackgroundResource(R.drawable.update_pill_ready)
+            updatePill.setTextColor(ContextCompat.getColor(this, R.color.bg_dark))
+            updatePill.text = if (dev) "🧪 Update" else "⬇ Update ready"
+        } else {
+            updatePill.setBackgroundResource(R.drawable.update_pill_idle)
+            updatePill.setTextColor(ContextCompat.getColor(this, R.color.cyan_accent))
+            updatePill.text = if (dev) "🧪 v${BuildConfig.VERSION_NAME}" else "↓ v${BuildConfig.VERSION_NAME}"
         }
     }
 
@@ -165,5 +224,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val RADAR_URL = "https://sthlm-under.lovable.app/?platform=android"
+        const val EXTRA_LAUNCH_SOURCE = "launch_source"
+        const val EXTRA_STATION_NAME = "station_name"
     }
 }

@@ -14,8 +14,8 @@ android {
         applicationId = "se.dnyx.sthlmmetro"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.3.0"
+        versionCode = 5
+        versionName = "1.3.1"
 
         buildConfigField("long", "BUILD_TIME_MS", "${System.currentTimeMillis()}L")
         buildConfigField("String", "GITHUB_REPO", "\"dnyx-fd3/sthlm-metro-android\"")

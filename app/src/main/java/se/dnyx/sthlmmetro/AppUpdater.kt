@@ -52,8 +52,9 @@ object AppUpdater {
         }
     }
 
-    fun showUpdateDialog(activity: Activity) {
+    fun showUpdateDialog(activity: Activity, source: String = "main") {
         if (activity.isFinishing || activity.isDestroyed) return
+        AnalyticsHelper.logUpdateDialogOpened(activity, source)
 
         val dialog = Dialog(activity)
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -107,6 +108,7 @@ object AppUpdater {
                 bodyView.text = "Installed: v${BuildConfig.VERSION_NAME}\nLatest build: ${info.tagName} ($sizeMb)"
                 primaryBtn.text = "⬇ DOWNLOAD & INSTALL"
                 primaryBtn.setOnClickListener {
+                    AnalyticsHelper.logUpdateDownloadStarted(activity, info.tagName)
                     startApkDownloadAndInstall(
                         activity = activity,
                         dialog = dialog,
@@ -128,6 +130,7 @@ object AppUpdater {
                 primaryBtn.setOnClickListener {
                     val url = info.apkDownloadUrl
                     if (!url.isNullOrEmpty()) {
+                        AnalyticsHelper.logUpdateDownloadStarted(activity, info.tagName)
                         startApkDownloadAndInstall(
                             activity = activity,
                             dialog = dialog,
