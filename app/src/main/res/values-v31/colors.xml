@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_surface">@android:color/system_neutral1_10</color>
+    <color name="widget_card">@android:color/system_neutral1_50</color>
+    <color name="widget_tab_idle">@android:color/system_neutral2_100</color>
+    <color name="widget_tab_active">@android:color/system_accent1_600</color>
+    <color name="widget_tab_active_text">@android:color/system_neutral1_0</color>
+    <color name="widget_text_primary">@android:color/system_neutral1_900</color>
+    <color name="widget_text_secondary">@android:color/system_neutral2_600</color>
+    <color name="widget_accent">@android:color/system_accent1_600</color>
+    <color name="widget_warn">#B45309</color>
+    <color name="widget_cancel">#E11D48</color>
+</resources>

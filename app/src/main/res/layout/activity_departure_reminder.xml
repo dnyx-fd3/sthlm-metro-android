@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/reminder_backdrop"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/transparent"
+    android:padding="20dp">
+
+    <LinearLayout
+        android:id="@+id/reminder_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/dialog_card_bg"
+        android:clickable="true"
+        android:focusable="true"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/rem_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/badge_red"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:minWidth="38dp"
+                android:paddingStart="8dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="4dp"
+                android:text="50"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/rem_dest"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="Odenplan"
+                    android:textColor="@color/text_primary"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/rem_meta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:text="Lappkärrsberget · Departs 14:25"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/rem_close"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:gravity="center"
+                android:text="✕"
+                android:textColor="@color/text_secondary"
+                android:textSize="16sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/rem_countdown_banner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/config_row_bg"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:padding="10dp"
+            android:text="Departs in 11m 20s"
+            android:textColor="@color/cyan_accent"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <!-- Walk buffer stepper -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:background="@drawable/config_row_bg"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="8dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Walk buffer before arrival"
+                    android:textColor="@color/text_primary"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Saved as default for this stop"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/rem_walk_minus"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:background="@drawable/chip_idle"
+                android:gravity="center"
+                android:text="−"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/rem_walk_value"
+                android:layout_width="54dp"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:text="3 min"
+                android:textColor="@color/cyan_accent"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/rem_walk_plus"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:background="@drawable/chip_idle"
+                android:gravity="center"
+                android:text="+"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/rem_btn_set_timer"
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/btn_save_bg"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:text="🔔 RING IN 8m 20s"
+            android:textColor="@color/bg_dark"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/rem_btn_open_radar"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/btn_secondary_bg"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:text="◎ OPEN 3D METRO RADAR"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+</FrameLayout>

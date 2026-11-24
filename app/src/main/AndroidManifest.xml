@@ -5,6 +5,13 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SET_TIMER" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="true"
@@ -36,6 +43,13 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".DepartureReminderActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.SthlmMetro.Dialog" />
+
         <receiver
             android:name=".MetroWidgetProvider"
             android:exported="true"
@@ -43,6 +57,8 @@
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="se.dnyx.sthlmmetro.ACTION_REFRESH_WIDGET" />
+                <action android:name="se.dnyx.sthlmmetro.ACTION_SELECT_SLOT" />
+                <action android:name="se.dnyx.sthlmmetro.ACTION_LOCAL_TICK" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

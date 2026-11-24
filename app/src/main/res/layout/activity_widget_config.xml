@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/config_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_dark"
@@ -13,16 +14,16 @@
         android:letterSpacing="0.12"
         android:text="STHLM METRO RADAR"
         android:textColor="@color/cyan_accent"
-        android:textSize="12sp"
+        android:textSize="11sp"
         android:textStyle="bold" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:text="Choose your widget station"
+        android:layout_marginTop="2dp"
+        android:text="Pick up to 3 commute stops"
         android:textColor="@color/text_primary"
-        android:textSize="20sp"
+        android:textSize="19sp"
         android:textStyle="bold" />
 
     <TextView
@@ -30,17 +31,298 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
-        android:text="Tap a hub below or search any SL station in Stockholm"
+        android:text="e.g. Lappis bus → Universitetet metro → Pendeltåg"
         android:textColor="@color/text_secondary"
         android:textSize="12sp" />
+
+    <!-- 3 Commute Stop Slots -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:id="@+id/slot_btn_0"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/slot_pill_active"
+            android:orientation="vertical"
+            android:padding="9dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:text="STOP 1"
+                android:textColor="@color/cyan_accent"
+                android:textSize="9sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/slot_label_0"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="T-Centralen"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/slot_mode_0"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="monospace"
+                android:maxLines="1"
+                android:text="Auto · 3m"
+                android:textColor="@color/text_secondary"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/slot_btn_1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/slot_pill_idle"
+            android:orientation="vertical"
+            android:padding="9dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:text="STOP 2"
+                android:textColor="@color/text_secondary"
+                android:textSize="9sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/slot_label_1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="+ Add stop"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/slot_mode_1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="monospace"
+                android:maxLines="1"
+                android:text="Optional"
+                android:textColor="@color/text_secondary"
+                android:textSize="10sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/slot_btn_2"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/slot_pill_idle"
+            android:orientation="vertical"
+            android:padding="9dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:text="STOP 3"
+                android:textColor="@color/text_secondary"
+                android:textSize="9sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/slot_label_2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="+ Add stop"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/slot_mode_2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="monospace"
+                android:maxLines="1"
+                android:text="Optional"
+                android:textColor="@color/text_secondary"
+                android:textSize="10sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Mode Filter Chips + Remove -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="9dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/chip_auto"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/chip_active"
+            android:fontFamily="monospace"
+            android:paddingStart="10dp"
+            android:paddingTop="5dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="5dp"
+            android:text="Auto"
+            android:textColor="@color/bg_dark"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/chip_bus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/chip_idle"
+            android:fontFamily="monospace"
+            android:paddingStart="10dp"
+            android:paddingTop="5dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="5dp"
+            android:text="Bus"
+            android:textColor="@color/text_primary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/chip_pendel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/chip_idle"
+            android:fontFamily="monospace"
+            android:paddingStart="10dp"
+            android:paddingTop="5dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="5dp"
+            android:text="Pendel"
+            android:textColor="@color/text_primary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/chip_all"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/chip_idle"
+            android:fontFamily="monospace"
+            android:paddingStart="10dp"
+            android:paddingTop="5dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="5dp"
+            android:text="All"
+            android:textColor="@color/text_primary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/btn_clear_slot"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:padding="5dp"
+            android:text="Remove"
+            android:textColor="@color/rose_cancel"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- Per-stop default remind-me walk buffer -->
+    <LinearLayout
+        android:id="@+id/config_walk_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/config_row_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="6dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Default reminder before arrival"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/config_walk_minus"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="@drawable/chip_idle"
+            android:gravity="center"
+            android:text="−"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/config_walk_value"
+            android:layout_width="50dp"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:text="3 min"
+            android:textColor="@color/cyan_accent"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/config_walk_plus"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="@drawable/chip_idle"
+            android:gravity="center"
+            android:text="+"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 
     <EditText
         android:id="@+id/station_search_input"
         android:layout_width="match_parent"
-        android:layout_height="46dp"
-        android:layout_marginTop="14dp"
+        android:layout_height="44dp"
+        android:layout_marginTop="9dp"
         android:background="@drawable/input_bg"
-        android:hint="Search e.g. Tekniska, Odenplan, Mörby..."
+        android:hint="Search stop for Stop 1 (e.g. Lappkärrsberget, Odenplan…)"
         android:imeOptions="actionSearch"
         android:inputType="text"
         android:maxLines="1"
@@ -48,55 +330,28 @@
         android:paddingEnd="14dp"
         android:textColor="@color/text_primary"
         android:textColorHint="@color/text_secondary"
-        android:textSize="14sp" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:background="@drawable/widget_row_bg"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingStart="12dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="12dp"
-        android:paddingBottom="8dp">
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Include buses"
-                android:textColor="@color/text_primary"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Off = Tunnelbana, Pendeltåg, Roslagsbanan &amp; Trams"
-                android:textColor="@color/text_secondary"
-                android:textSize="11sp" />
-        </LinearLayout>
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/include_buses_switch"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-    </LinearLayout>
+        android:textSize="13sp" />
 
     <ListView
         android:id="@+id/station_list_view"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="9dp"
         android:layout_weight="1"
         android:divider="@android:color/transparent"
-        android:dividerHeight="8dp" />
+        android:dividerHeight="7dp" />
+
+    <TextView
+        android:id="@+id/btn_save_widget"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/btn_save_bg"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:text="SAVE WIDGET"
+        android:textColor="@color/bg_dark"
+        android:textSize="13sp"
+        android:textStyle="bold" />
 
 </LinearLayout>

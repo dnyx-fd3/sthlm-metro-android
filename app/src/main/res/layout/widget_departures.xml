@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/widget_root"
+    android:id="@android:id/background"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg"
+    android:clipToOutline="true"
     android:orientation="vertical"
-    android:padding="10dp">
+    android:padding="12dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -19,7 +20,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:paddingEnd="8dp">
+            android:paddingEnd="6dp">
 
             <TextView
                 android:id="@+id/widget_station_name"
@@ -28,8 +29,8 @@
                 android:ellipsize="end"
                 android:maxLines="1"
                 android:text="T-Centralen ▾"
-                android:textColor="@color/text_primary"
-                android:textSize="14sp"
+                android:textColor="@color/widget_text_primary"
+                android:textSize="15sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -37,23 +38,98 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
-                android:fontFamily="monospace"
                 android:maxLines="1"
-                android:text="LIVE SL · Tap station to switch"
-                android:textColor="@color/text_secondary"
+                android:text="Live SL · Tap row for reminder"
+                android:textColor="@color/widget_text_secondary"
                 android:textSize="10sp" />
         </LinearLayout>
 
         <TextView
+            android:id="@+id/widget_radar_btn"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/widget_refresh_bg"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:text="3D"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
             android:id="@+id/widget_refresh_btn"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:background="@drawable/widget_row_bg"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/widget_refresh_bg"
             android:gravity="center"
             android:text="↻"
-            android:textColor="@color/cyan_accent"
-            android:textSize="18sp"
+            android:textColor="@color/widget_accent"
+            android:textSize="17sp"
             android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- 2 or 3 Station Quick-Switcher Tabs -->
+    <LinearLayout
+        android:id="@+id/widget_tabs_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="7dp"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/widget_tab_0"
+            android:layout_width="0dp"
+            android:layout_height="26dp"
+            android:layout_marginEnd="5dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_tab_active"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:text="Stop 1"
+            android:textColor="@color/widget_tab_active_text"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_tab_1"
+            android:layout_width="0dp"
+            android:layout_height="26dp"
+            android:layout_marginEnd="5dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_tab_idle"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:text="Stop 2"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/widget_tab_2"
+            android:layout_width="0dp"
+            android:layout_height="26dp"
+            android:layout_weight="1"
+            android:background="@drawable/widget_tab_idle"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:text="Stop 3"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
     </LinearLayout>
 
     <TextView
@@ -61,19 +137,88 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
-        android:fontFamily="monospace"
         android:gravity="center"
         android:padding="8dp"
         android:text="Fetching live SL departures…"
-        android:textColor="@color/text_secondary"
+        android:textColor="@color/widget_text_secondary"
         android:textSize="11sp"
         android:visibility="visible" />
+
+    <!-- Roaming Cat Empty State (shown when cached departures expire from inactivity) -->
+    <LinearLayout
+        android:id="@+id/widget_cat_empty"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="7dp"
+        android:layout_weight="1"
+        android:background="@drawable/widget_row_bg"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="10dp"
+        android:visibility="gone">
+
+        <ViewFlipper
+            android:id="@+id/cat_flipper"
+            android:layout_width="match_parent"
+            android:layout_height="72dp"
+            android:autoStart="true"
+            android:flipInterval="700">
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="Cat strolling left"
+                android:scaleType="fitCenter"
+                android:src="@drawable/cat_frame_0" />
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="Cat strolling center"
+                android:scaleType="fitCenter"
+                android:src="@drawable/cat_frame_1" />
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="Cat pointing to refresh"
+                android:scaleType="fitCenter"
+                android:src="@drawable/cat_frame_2" />
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="Cat waving at refresh"
+                android:scaleType="fitCenter"
+                android:src="@drawable/cat_frame_3" />
+        </ViewFlipper>
+
+        <TextView
+            android:id="@+id/widget_cat_caption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:text="All buses left without you... poke ↻"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:gravity="center"
+            android:text="Tap cat or ↻ for fresh SL times"
+            android:textColor="@color/widget_text_secondary"
+            android:textSize="10sp" />
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/widget_rows_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="7dp"
         android:orientation="vertical">
 
         <LinearLayout
@@ -94,7 +239,7 @@
                 android:id="@+id/row_0_badge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/badge_cyan"
+                android:background="@drawable/badge_red"
                 android:fontFamily="monospace"
                 android:gravity="center"
                 android:minWidth="34dp"
@@ -103,14 +248,14 @@
                 android:paddingEnd="6dp"
                 android:paddingBottom="3dp"
                 android:text="14"
-                android:textColor="#030914"
+                android:textColor="#FFFFFF"
                 android:textSize="11sp"
                 android:textStyle="bold" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="9dp"
                 android:layout_marginEnd="6dp"
                 android:layout_weight="1"
                 android:orientation="vertical">
@@ -122,7 +267,7 @@
                     android:ellipsize="end"
                     android:maxLines="1"
                     android:text="Mörby centrum"
-                    android:textColor="@color/text_primary"
+                    android:textColor="@color/widget_text_primary"
                     android:textSize="13sp"
                     android:textStyle="bold" />
 
@@ -131,10 +276,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:fontFamily="monospace"
                     android:maxLines="1"
-                    android:text="Tunnelbana"
-                    android:textColor="@color/text_secondary"
+                    android:text="Tunnelbana · Tap to remind"
+                    android:textColor="@color/widget_text_secondary"
                     android:textSize="10sp" />
             </LinearLayout>
 
@@ -144,15 +288,26 @@
                 android:gravity="end"
                 android:orientation="vertical">
 
+                <Chronometer
+                    android:id="@+id/row_0_chrono"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/widget_accent"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
                 <TextView
                     android:id="@+id/row_0_eta"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="monospace"
-                    android:text="3 min"
-                    android:textColor="@color/cyan_accent"
+                    android:text="NOW"
+                    android:textColor="@color/widget_accent"
                     android:textSize="13sp"
-                    android:textStyle="bold" />
+                    android:textStyle="bold"
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/row_0_clock"
@@ -160,7 +315,7 @@
                     android:layout_height="wrap_content"
                     android:fontFamily="monospace"
                     android:text="14:25"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="@color/widget_text_secondary"
                     android:textSize="10sp" />
             </LinearLayout>
         </LinearLayout>
@@ -169,7 +324,7 @@
             android:id="@+id/row_1"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="5dp"
             android:background="@drawable/widget_row_bg"
             android:gravity="center_vertical"
             android:orientation="horizontal"
@@ -183,7 +338,7 @@
                 android:id="@+id/row_1_badge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/badge_cyan"
+                android:background="@drawable/badge_red"
                 android:fontFamily="monospace"
                 android:gravity="center"
                 android:minWidth="34dp"
@@ -192,14 +347,14 @@
                 android:paddingEnd="6dp"
                 android:paddingBottom="3dp"
                 android:text="14"
-                android:textColor="#030914"
+                android:textColor="#FFFFFF"
                 android:textSize="11sp"
                 android:textStyle="bold" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="9dp"
                 android:layout_marginEnd="6dp"
                 android:layout_weight="1"
                 android:orientation="vertical">
@@ -211,7 +366,7 @@
                     android:ellipsize="end"
                     android:maxLines="1"
                     android:text="Mörby centrum"
-                    android:textColor="@color/text_primary"
+                    android:textColor="@color/widget_text_primary"
                     android:textSize="13sp"
                     android:textStyle="bold" />
 
@@ -220,10 +375,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:fontFamily="monospace"
                     android:maxLines="1"
-                    android:text="Tunnelbana"
-                    android:textColor="@color/text_secondary"
+                    android:text="Tunnelbana · Tap to remind"
+                    android:textColor="@color/widget_text_secondary"
                     android:textSize="10sp" />
             </LinearLayout>
 
@@ -233,15 +387,26 @@
                 android:gravity="end"
                 android:orientation="vertical">
 
+                <Chronometer
+                    android:id="@+id/row_1_chrono"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/widget_accent"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
                 <TextView
                     android:id="@+id/row_1_eta"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="monospace"
-                    android:text="3 min"
-                    android:textColor="@color/cyan_accent"
+                    android:text="NOW"
+                    android:textColor="@color/widget_accent"
                     android:textSize="13sp"
-                    android:textStyle="bold" />
+                    android:textStyle="bold"
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/row_1_clock"
@@ -249,7 +414,7 @@
                     android:layout_height="wrap_content"
                     android:fontFamily="monospace"
                     android:text="14:25"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="@color/widget_text_secondary"
                     android:textSize="10sp" />
             </LinearLayout>
         </LinearLayout>
@@ -258,7 +423,7 @@
             android:id="@+id/row_2"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="5dp"
             android:background="@drawable/widget_row_bg"
             android:gravity="center_vertical"
             android:orientation="horizontal"
@@ -272,7 +437,7 @@
                 android:id="@+id/row_2_badge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/badge_cyan"
+                android:background="@drawable/badge_red"
                 android:fontFamily="monospace"
                 android:gravity="center"
                 android:minWidth="34dp"
@@ -281,14 +446,14 @@
                 android:paddingEnd="6dp"
                 android:paddingBottom="3dp"
                 android:text="14"
-                android:textColor="#030914"
+                android:textColor="#FFFFFF"
                 android:textSize="11sp"
                 android:textStyle="bold" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="9dp"
                 android:layout_marginEnd="6dp"
                 android:layout_weight="1"
                 android:orientation="vertical">
@@ -300,7 +465,7 @@
                     android:ellipsize="end"
                     android:maxLines="1"
                     android:text="Mörby centrum"
-                    android:textColor="@color/text_primary"
+                    android:textColor="@color/widget_text_primary"
                     android:textSize="13sp"
                     android:textStyle="bold" />
 
@@ -309,10 +474,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:fontFamily="monospace"
                     android:maxLines="1"
-                    android:text="Tunnelbana"
-                    android:textColor="@color/text_secondary"
+                    android:text="Tunnelbana · Tap to remind"
+                    android:textColor="@color/widget_text_secondary"
                     android:textSize="10sp" />
             </LinearLayout>
 
@@ -322,15 +486,26 @@
                 android:gravity="end"
                 android:orientation="vertical">
 
+                <Chronometer
+                    android:id="@+id/row_2_chrono"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/widget_accent"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
                 <TextView
                     android:id="@+id/row_2_eta"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="monospace"
-                    android:text="3 min"
-                    android:textColor="@color/cyan_accent"
+                    android:text="NOW"
+                    android:textColor="@color/widget_accent"
                     android:textSize="13sp"
-                    android:textStyle="bold" />
+                    android:textStyle="bold"
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/row_2_clock"
@@ -338,7 +513,7 @@
                     android:layout_height="wrap_content"
                     android:fontFamily="monospace"
                     android:text="14:25"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="@color/widget_text_secondary"
                     android:textSize="10sp" />
             </LinearLayout>
         </LinearLayout>
@@ -347,7 +522,7 @@
             android:id="@+id/row_3"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="5dp"
             android:background="@drawable/widget_row_bg"
             android:gravity="center_vertical"
             android:orientation="horizontal"
@@ -361,7 +536,7 @@
                 android:id="@+id/row_3_badge"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@drawable/badge_cyan"
+                android:background="@drawable/badge_red"
                 android:fontFamily="monospace"
                 android:gravity="center"
                 android:minWidth="34dp"
@@ -370,14 +545,14 @@
                 android:paddingEnd="6dp"
                 android:paddingBottom="3dp"
                 android:text="14"
-                android:textColor="#030914"
+                android:textColor="#FFFFFF"
                 android:textSize="11sp"
                 android:textStyle="bold" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
+                android:layout_marginStart="9dp"
                 android:layout_marginEnd="6dp"
                 android:layout_weight="1"
                 android:orientation="vertical">
@@ -389,7 +564,7 @@
                     android:ellipsize="end"
                     android:maxLines="1"
                     android:text="Mörby centrum"
-                    android:textColor="@color/text_primary"
+                    android:textColor="@color/widget_text_primary"
                     android:textSize="13sp"
                     android:textStyle="bold" />
 
@@ -398,10 +573,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:fontFamily="monospace"
                     android:maxLines="1"
-                    android:text="Tunnelbana"
-                    android:textColor="@color/text_secondary"
+                    android:text="Tunnelbana · Tap to remind"
+                    android:textColor="@color/widget_text_secondary"
                     android:textSize="10sp" />
             </LinearLayout>
 
@@ -411,15 +585,26 @@
                 android:gravity="end"
                 android:orientation="vertical">
 
+                <Chronometer
+                    android:id="@+id/row_3_chrono"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textColor="@color/widget_accent"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
                 <TextView
                     android:id="@+id/row_3_eta"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="monospace"
-                    android:text="3 min"
-                    android:textColor="@color/cyan_accent"
+                    android:text="NOW"
+                    android:textColor="@color/widget_accent"
                     android:textSize="13sp"
-                    android:textStyle="bold" />
+                    android:textStyle="bold"
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/row_3_clock"
@@ -427,7 +612,7 @@
                     android:layout_height="wrap_content"
                     android:fontFamily="monospace"
                     android:text="14:25"
-                    android:textColor="@color/text_secondary"
+                    android:textColor="@color/widget_text_secondary"
                     android:textSize="10sp" />
             </LinearLayout>
         </LinearLayout>
