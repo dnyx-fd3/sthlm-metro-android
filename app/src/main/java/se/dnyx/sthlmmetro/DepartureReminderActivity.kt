@@ -143,11 +143,11 @@ class DepartureReminderActivity : AppCompatActivity() {
             return
         }
 
-        countdownBanner.text = "In ${formatDuration(remainingSec)}"
+        countdownBanner.text = "Departs in ${formatDuration(remainingSec)}"
         val active = existingReminder()
         if (active != null) {
             val ringStr = ReminderManager.formatClock(active.triggerAtMs)
-            setTimerBtn.text = "🔕 CANCEL · $ringStr"
+            setTimerBtn.text = "🔕 CLEAR · $ringStr (Timer in Clock)"
             return
         }
 
@@ -157,9 +157,11 @@ class DepartureReminderActivity : AppCompatActivity() {
                 .atZone(ZoneId.systemDefault())
                 .toLocalTime()
                 .format(clockFmt)
-            setTimerBtn.text = "🔔 CHIME · $ringAtStr (${formatDuration(timerSec)})"
+            countdownBanner.text = "Leave in ${formatDuration(timerSec)} ($ringAtStr)"
+            setTimerBtn.text = "⏱ SET PHONE TIMER · ${formatDuration(timerSec)}"
         } else {
-            setTimerBtn.text = "🏃 LEAVE NOW · ${formatDuration(remainingSec)}"
+            countdownBanner.text = "Hurry! Leaves in ${formatDuration(remainingSec)}"
+            setTimerBtn.text = "🏃 HURRY — LEAVE NOW"
         }
     }
 
@@ -168,7 +170,7 @@ class DepartureReminderActivity : AppCompatActivity() {
         if (active != null) {
             ReminderManager.cancelReminder(this, active.key)
             MetroWidgetProvider.rerenderAllFromCache(this)
-            Toast.makeText(this, "🔕 Cancelled", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "🔕 Notification cleared (check Clock app for phone timer)", Toast.LENGTH_LONG).show()
             finish()
             return
         }
@@ -186,10 +188,15 @@ class DepartureReminderActivity : AppCompatActivity() {
         when (res) {
             is ReminderToggleResult.Scheduled -> {
                 MetroWidgetProvider.rerenderAllFromCache(this)
-                Toast.makeText(this, "🔔 Chime · ${res.ringTimeStr}", Toast.LENGTH_SHORT).show()
+                val msg = if (res.phoneTimerSet) {
+                    "⏱ Phone timer set for ${res.ringTimeStr}!"
+                } else {
+                    "⏱ Countdown set for ${res.ringTimeStr}"
+                }
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             }
             is ReminderToggleResult.TooClose -> {
-                Toast.makeText(this, "🏃 Leaves in ${formatDuration(res.remainingSeconds)}", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "🏃 Hurry! Leaves in ${formatDuration(res.remainingSeconds)}", Toast.LENGTH_LONG).show()
             }
             else -> Unit
         }

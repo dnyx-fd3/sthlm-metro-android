@@ -7,6 +7,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -244,18 +245,24 @@ open class MetroWidgetProvider : AppWidgetProvider() {
         MINI, COMPACT, BOARD
     }
 
+    private data class DualColor(val light: Int, val dark: Int) {
+        companion object {
+            fun fixed(color: Int) = DualColor(color, color)
+        }
+    }
+
     private data class WidgetPalette(
         val bgRes: Int,
         val rowRes: Int,
         val tabActiveRes: Int,
         val tabIdleRes: Int,
         val btnRes: Int,
-        val textPrimary: Int,
-        val textSecondary: Int,
-        val tabActiveText: Int,
-        val accent: Int,
-        val warn: Int,
-        val cancel: Int
+        val textPrimary: DualColor,
+        val textSecondary: DualColor,
+        val tabActiveText: DualColor,
+        val accent: DualColor,
+        val warn: DualColor,
+        val cancel: DualColor
     )
 
     companion object {
@@ -512,9 +519,9 @@ open class MetroWidgetProvider : AppWidgetProvider() {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val sizeMap = mapOf(
-                    SizeF(180f, 40f) to builder(LayoutType.MINI),
-                    SizeF(180f, 110f) to builder(LayoutType.COMPACT),
-                    SizeF(180f, 195f) to builder(LayoutType.BOARD)
+                    SizeF(140f, 36f) to builder(LayoutType.MINI),
+                    SizeF(140f, 78f) to builder(LayoutType.COMPACT),
+                    SizeF(140f, 162f) to builder(LayoutType.BOARD)
                 )
                 return RemoteViews(sizeMap)
             }
@@ -522,11 +529,21 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             val opts = appWidgetManager.getAppWidgetOptions(appWidgetId)
             val minH = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 140)
             val chosen = when {
-                minH < 95 -> LayoutType.MINI
-                minH < 185 -> LayoutType.COMPACT
+                minH < 78 -> LayoutType.MINI
+                minH < 162 -> LayoutType.COMPACT
                 else -> LayoutType.BOARD
             }
             return builder(chosen)
+        }
+
+        private fun applyTextColor(context: Context, views: RemoteViews, viewId: Int, color: DualColor) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                views.setColorInt(viewId, "setTextColor", color.light, color.dark)
+            } else {
+                val isNight = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                    Configuration.UI_MODE_NIGHT_YES
+                views.setTextColor(viewId, if (isNight) color.dark else color.light)
+            }
         }
 
         private fun resolvePalette(context: Context, theme: WidgetTheme): WidgetPalette {
@@ -537,12 +554,12 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                     tabActiveRes = R.drawable.widget_tab_active_dark,
                     tabIdleRes = R.drawable.widget_tab_idle_dark,
                     btnRes = R.drawable.widget_btn_dark,
-                    textPrimary = ContextCompat.getColor(context, R.color.w_dark_text_primary),
-                    textSecondary = ContextCompat.getColor(context, R.color.w_dark_text_secondary),
-                    tabActiveText = ContextCompat.getColor(context, R.color.w_dark_tab_active_text),
-                    accent = ContextCompat.getColor(context, R.color.w_dark_accent),
-                    warn = ContextCompat.getColor(context, R.color.widget_warn),
-                    cancel = ContextCompat.getColor(context, R.color.widget_cancel)
+                    textPrimary = DualColor.fixed(ContextCompat.getColor(context, R.color.w_dark_text_primary)),
+                    textSecondary = DualColor.fixed(ContextCompat.getColor(context, R.color.w_dark_text_secondary)),
+                    tabActiveText = DualColor.fixed(ContextCompat.getColor(context, R.color.w_dark_tab_active_text)),
+                    accent = DualColor.fixed(ContextCompat.getColor(context, R.color.w_dark_accent)),
+                    warn = DualColor.fixed(ContextCompat.getColor(context, R.color.widget_warn)),
+                    cancel = DualColor.fixed(ContextCompat.getColor(context, R.color.widget_cancel))
                 )
                 WidgetTheme.LIGHT -> WidgetPalette(
                     bgRes = R.drawable.widget_bg_light,
@@ -550,26 +567,43 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                     tabActiveRes = R.drawable.widget_tab_active_light,
                     tabIdleRes = R.drawable.widget_tab_idle_light,
                     btnRes = R.drawable.widget_btn_light,
-                    textPrimary = ContextCompat.getColor(context, R.color.w_light_text_primary),
-                    textSecondary = ContextCompat.getColor(context, R.color.w_light_text_secondary),
-                    tabActiveText = ContextCompat.getColor(context, R.color.w_light_tab_active_text),
-                    accent = ContextCompat.getColor(context, R.color.w_light_accent),
-                    warn = ContextCompat.getColor(context, R.color.widget_warn),
-                    cancel = ContextCompat.getColor(context, R.color.widget_cancel)
+                    textPrimary = DualColor.fixed(ContextCompat.getColor(context, R.color.w_light_text_primary)),
+                    textSecondary = DualColor.fixed(ContextCompat.getColor(context, R.color.w_light_text_secondary)),
+                    tabActiveText = DualColor.fixed(ContextCompat.getColor(context, R.color.w_light_tab_active_text)),
+                    accent = DualColor.fixed(ContextCompat.getColor(context, R.color.w_light_accent)),
+                    warn = DualColor.fixed(ContextCompat.getColor(context, R.color.widget_warn)),
+                    cancel = DualColor.fixed(ContextCompat.getColor(context, R.color.widget_cancel))
                 )
-                WidgetTheme.AUTO -> WidgetPalette(
-                    bgRes = R.drawable.widget_bg_auto,
-                    rowRes = R.drawable.widget_row_auto,
-                    tabActiveRes = R.drawable.widget_tab_active_auto,
-                    tabIdleRes = R.drawable.widget_tab_idle_auto,
-                    btnRes = R.drawable.widget_btn_auto,
-                    textPrimary = ContextCompat.getColor(context, R.color.widget_text_primary),
-                    textSecondary = ContextCompat.getColor(context, R.color.widget_text_secondary),
-                    tabActiveText = ContextCompat.getColor(context, R.color.widget_tab_active_text),
-                    accent = ContextCompat.getColor(context, R.color.widget_accent),
-                    warn = ContextCompat.getColor(context, R.color.widget_warn),
-                    cancel = ContextCompat.getColor(context, R.color.widget_cancel)
-                )
+                WidgetTheme.AUTO -> {
+                    val baseCfg = context.resources.configuration
+                    val lightCtx = context.createConfigurationContext(
+                        Configuration(baseCfg).apply {
+                            uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or Configuration.UI_MODE_NIGHT_NO
+                        }
+                    )
+                    val darkCtx = context.createConfigurationContext(
+                        Configuration(baseCfg).apply {
+                            uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or Configuration.UI_MODE_NIGHT_YES
+                        }
+                    )
+                    fun dual(resId: Int) = DualColor(
+                        ContextCompat.getColor(lightCtx, resId),
+                        ContextCompat.getColor(darkCtx, resId)
+                    )
+                    WidgetPalette(
+                        bgRes = R.drawable.widget_bg_auto,
+                        rowRes = R.drawable.widget_row_auto,
+                        tabActiveRes = R.drawable.widget_tab_active_auto,
+                        tabIdleRes = R.drawable.widget_tab_idle_auto,
+                        btnRes = R.drawable.widget_btn_auto,
+                        textPrimary = dual(R.color.widget_text_primary),
+                        textSecondary = dual(R.color.widget_text_secondary),
+                        tabActiveText = dual(R.color.widget_tab_active_text),
+                        accent = dual(R.color.widget_accent),
+                        warn = dual(R.color.widget_warn),
+                        cancel = dual(R.color.widget_cancel)
+                    )
+                }
             }
         }
 
@@ -583,12 +617,19 @@ open class MetroWidgetProvider : AppWidgetProvider() {
         ): RemoteViews {
             val palette = resolvePalette(context, cfg.theme)
             val views = createThemedBase(context, appWidgetId, cfg, layoutType, palette)
+            val eff = cfg.effectiveSlot
             if (layoutType == LayoutType.MINI) {
                 views.setViewVisibility(R.id.mini_dep_container, View.GONE)
                 views.setViewVisibility(R.id.mini_cat_container, View.GONE)
                 views.setViewVisibility(R.id.mini_status, View.VISIBLE)
-                views.setTextViewText(R.id.mini_status, bodyNote)
-                views.setTextColor(R.id.mini_status, palette.textSecondary)
+                val shortStop = shortenTabLabel(eff.stationName)
+                val statusLabel = if (eff.siteId > 0 && !bodyNote.contains(shortStop, ignoreCase = true)) {
+                    "$shortStop · $bodyNote"
+                } else {
+                    bodyNote
+                }
+                views.setTextViewText(R.id.mini_status, statusLabel)
+                applyTextColor(context, views, R.id.mini_status, palette.textPrimary)
                 views.setOnClickPendingIntent(R.id.mini_status, openAppPendingIntent(context, appWidgetId))
                 return views
             }
@@ -598,7 +639,7 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             views.setViewVisibility(R.id.widget_cat_empty, View.GONE)
             views.setViewVisibility(R.id.widget_status_text, View.VISIBLE)
             views.setTextViewText(R.id.widget_status_text, bodyNote)
-            views.setTextColor(R.id.widget_status_text, palette.textSecondary)
+            applyTextColor(context, views, R.id.widget_status_text, palette.textSecondary)
             for (i in 0 until maxRows) {
                 views.setViewVisibility(ROW_IDS[i], View.GONE)
             }
@@ -615,13 +656,14 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             val palette = resolvePalette(context, cfg.theme)
             val views = createThemedBase(context, appWidgetId, cfg, layoutType, palette)
             val catPi = catPokePendingIntent(context, appWidgetId)
+            val eff = cfg.effectiveSlot
 
             if (layoutType == LayoutType.MINI) {
                 views.setViewVisibility(R.id.mini_dep_container, View.GONE)
                 views.setViewVisibility(R.id.mini_status, View.GONE)
                 views.setViewVisibility(R.id.mini_cat_container, View.VISIBLE)
-                views.setTextViewText(R.id.mini_cat_text, "All left · tap ↻")
-                views.setTextColor(R.id.mini_cat_text, palette.textPrimary)
+                views.setTextViewText(R.id.mini_cat_text, "${shortenTabLabel(eff.stationName)} · All left ↻")
+                applyTextColor(context, views, R.id.mini_cat_text, palette.textPrimary)
                 views.setOnClickPendingIntent(R.id.mini_cat_container, catPi)
                 return views
             }
@@ -631,7 +673,7 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             views.setViewVisibility(R.id.widget_status_text, View.GONE)
             views.setViewVisibility(R.id.widget_cat_empty, View.VISIBLE)
             views.setTextViewText(R.id.widget_cat_caption, "All departed · tap cat or ↻")
-            views.setTextColor(R.id.widget_cat_caption, palette.textPrimary)
+            applyTextColor(context, views, R.id.widget_cat_caption, palette.textPrimary)
             views.setOnClickPendingIntent(R.id.widget_cat_empty, catPi)
             for (i in 0 until maxRows) {
                 views.setViewVisibility(ROW_IDS[i], View.GONE)
@@ -666,7 +708,7 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.mini_badge, d.designation)
                 views.setInt(R.id.mini_badge, "setBackgroundResource", badgeDrawableFor(d.badgeStyle))
                 views.setTextViewText(R.id.mini_dest, d.destination)
-                views.setTextColor(R.id.mini_dest, if (d.cancelled) palette.cancel else palette.textPrimary)
+                applyTextColor(context, views, R.id.mini_dest, if (d.cancelled) palette.cancel else palette.textPrimary)
 
                 val standStr = d.standOrTrackLabel()
                 val stopBase = if (standStr.isNotEmpty()) {
@@ -675,12 +717,12 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                     shortenTabLabel(eff.stationName)
                 }
                 val stopLine = when {
-                    activeRem != null -> "🔔 ${ReminderManager.formatClock(activeRem.triggerAtMs)} · $stopBase"
+                    activeRem != null -> "⏱ ${ReminderManager.formatClock(activeRem.triggerAtMs)} · $stopBase"
                     cfg.isActiveNearMe && cfg.resolvedNearMe != null -> "📍 $stopBase · ${cfg.resolvedNearMe.walkMinutes} min"
-                    else -> stopBase
+                    else -> "📍 $stopBase"
                 }
                 views.setTextViewText(R.id.mini_stop, stopLine)
-                views.setTextColor(R.id.mini_stop, if (activeRem != null) palette.accent else palette.textSecondary)
+                applyTextColor(context, views, R.id.mini_stop, palette.accent)
 
                 val remainingMs = if (d.expectedEpochMs > 0L) d.expectedEpochMs - nowMs else -1L
                 val etaColor = when {
@@ -694,13 +736,13 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                     views.setViewVisibility(R.id.mini_eta, View.GONE)
                     views.setChronometerCountDown(R.id.mini_chrono, true)
                     views.setChronometer(R.id.mini_chrono, elapsedNow + remainingMs, null, true)
-                    views.setTextColor(R.id.mini_chrono, etaColor)
+                    applyTextColor(context, views, R.id.mini_chrono, etaColor)
                 } else {
                     views.setChronometer(R.id.mini_chrono, elapsedNow, null, false)
                     views.setViewVisibility(R.id.mini_chrono, View.GONE)
                     views.setViewVisibility(R.id.mini_eta, View.VISIBLE)
                     views.setTextViewText(R.id.mini_eta, fallbackEtaLabel(d, remainingMs))
-                    views.setTextColor(R.id.mini_eta, etaColor)
+                    applyTextColor(context, views, R.id.mini_eta, etaColor)
                 }
 
                 views.setOnClickPendingIntent(
@@ -726,7 +768,7 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                     views.setTextViewText(BADGE_IDS[i], d.designation)
                     views.setInt(BADGE_IDS[i], "setBackgroundResource", badgeDrawableFor(d.badgeStyle))
                     views.setTextViewText(DEST_IDS[i], d.destination)
-                    views.setTextColor(DEST_IDS[i], if (d.cancelled) palette.cancel else palette.textPrimary)
+                    applyTextColor(context, views, DEST_IDS[i], if (d.cancelled) palette.cancel else palette.textPrimary)
 
                     // Show Stand/Track, 🔔 HH:mm when reminded, or delay/cancel status
                     val subParts = mutableListOf<String>()
@@ -735,7 +777,7 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                         subParts.add(standStr)
                     }
                     if (activeRem != null) {
-                        subParts.add("🔔 ${ReminderManager.formatClock(activeRem.triggerAtMs)}")
+                        subParts.add("⏱ ${ReminderManager.formatClock(activeRem.triggerAtMs)}")
                     }
                     if (d.cancelled) {
                         subParts.add("Cancelled")
@@ -746,7 +788,9 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                     if (subParts.isNotEmpty()) {
                         views.setViewVisibility(SUB_IDS[i], View.VISIBLE)
                         views.setTextViewText(SUB_IDS[i], subParts.joinToString(" · "))
-                        views.setTextColor(
+                        applyTextColor(
+                            context,
+                            views,
                             SUB_IDS[i],
                             when {
                                 d.cancelled -> palette.cancel
@@ -771,13 +815,13 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                         views.setViewVisibility(ETA_IDS[i], View.GONE)
                         views.setChronometerCountDown(CHRONO_IDS[i], true)
                         views.setChronometer(CHRONO_IDS[i], elapsedNow + remainingMs, null, true)
-                        views.setTextColor(CHRONO_IDS[i], etaColor)
+                        applyTextColor(context, views, CHRONO_IDS[i], etaColor)
                     } else {
                         views.setChronometer(CHRONO_IDS[i], elapsedNow, null, false)
                         views.setViewVisibility(CHRONO_IDS[i], View.GONE)
                         views.setViewVisibility(ETA_IDS[i], View.VISIBLE)
                         views.setTextViewText(ETA_IDS[i], fallbackEtaLabel(d, remainingMs))
-                        views.setTextColor(ETA_IDS[i], etaColor)
+                        applyTextColor(context, views, ETA_IDS[i], etaColor)
                     }
 
                     // 1-tap row toggles 🔔 reminder SILENTLY inside the widget!
@@ -814,7 +858,7 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             views.setInt(R.id.widget_bg_image, "setImageAlpha", bgAlpha)
 
             views.setInt(R.id.widget_refresh_btn, "setBackgroundResource", palette.btnRes)
-            views.setTextColor(R.id.widget_refresh_btn, palette.accent)
+            applyTextColor(context, views, R.id.widget_refresh_btn, palette.accent)
             views.setOnClickPendingIntent(R.id.widget_refresh_btn, refreshPendingIntent(context, appWidgetId))
 
             if (layoutType == LayoutType.MINI) {
@@ -830,9 +874,14 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             }
 
             val eff = cfg.effectiveSlot
-            views.setTextViewText(R.id.widget_station_name, eff.stationName)
-            views.setTextColor(R.id.widget_station_name, palette.textPrimary)
-            views.setTextColor(R.id.widget_updated_at, palette.textSecondary)
+            val stationHeader = if (cfg.isActiveNearMe && cfg.resolvedNearMe != null) {
+                "📍 ${eff.stationName}"
+            } else {
+                eff.stationName
+            }
+            views.setTextViewText(R.id.widget_station_name, stationHeader)
+            applyTextColor(context, views, R.id.widget_station_name, palette.textPrimary)
+            applyTextColor(context, views, R.id.widget_updated_at, palette.textSecondary)
 
             val openAppPi = openAppPendingIntent(context, appWidgetId)
             views.setOnClickPendingIntent(R.id.widget_header_tap, openAppPi)
@@ -852,7 +901,9 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                             "setBackgroundResource",
                             if (isSelected) palette.tabActiveRes else palette.tabIdleRes
                         )
-                        views.setTextColor(
+                        applyTextColor(
+                            context,
+                            views,
                             TAB_IDS[i],
                             if (isSelected) palette.tabActiveText else palette.textSecondary
                         )
@@ -936,18 +987,20 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             d: DepartureItem,
             rowIndex: Int
         ): PendingIntent {
-            val intent = Intent(context, MetroWidgetProvider::class.java).apply {
-                action = ACTION_TOGGLE_REMINDER
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-                putExtra(EXTRA_REM_SITE_ID, eff.siteId)
-                putExtra(EXTRA_REM_STATION, eff.stationName)
-                putExtra(EXTRA_REM_LINE, d.designation)
-                putExtra(EXTRA_REM_DEST, d.destination)
-                putExtra(EXTRA_REM_EXPECTED_MS, d.expectedEpochMs)
-                putExtra(EXTRA_REM_WALK_MIN, eff.walkMinutes)
-                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            val intent = Intent(context, DepartureReminderActivity::class.java).apply {
+                putExtra(DepartureReminderActivity.EXTRA_SITE_ID, eff.siteId)
+                putExtra(DepartureReminderActivity.EXTRA_SLOT_INDEX, -1)
+                putExtra(DepartureReminderActivity.EXTRA_STATION_NAME, eff.stationName)
+                putExtra(DepartureReminderActivity.EXTRA_DESIGNATION, d.designation)
+                putExtra(DepartureReminderActivity.EXTRA_DESTINATION, d.destination)
+                putExtra(DepartureReminderActivity.EXTRA_CLOCK_TIME, d.clockTime)
+                putExtra(DepartureReminderActivity.EXTRA_STOP_POINT, d.standOrTrackLabel())
+                putExtra(DepartureReminderActivity.EXTRA_EXPECTED_EPOCH_MS, d.expectedEpochMs)
+                putExtra(DepartureReminderActivity.EXTRA_BADGE_STYLE, d.badgeStyle.name)
+                putExtra(DepartureReminderActivity.EXTRA_WALK_MINUTES, eff.walkMinutes)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
-            return PendingIntent.getBroadcast(
+            return PendingIntent.getActivity(
                 context,
                 appWidgetId * 60 + 20 + rowIndex,
                 intent,

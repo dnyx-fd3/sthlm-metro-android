@@ -373,6 +373,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         AnalyticsHelper.syncCollectionState(this)
+        FeedbackHelper.flushPendingAsync(this)
         activeRemindersMap = WidgetPrefs.loadActiveReminders(this).associateBy { it.key }
         val latestStarred = WidgetPrefs.loadStarredLines(this)
         val starredChanged = latestStarred != starredLines
@@ -1133,6 +1134,7 @@ class MainActivity : AppCompatActivity() {
 
             val metaRow = v.findViewById<View>(R.id.dep_meta_row)
             val standView = v.findViewById<TextView>(R.id.dep_stand)
+            val hurryCatView = v.findViewById<ImageView>(R.id.dep_hurry_cat)
             val sub = v.findViewById<TextView>(R.id.dep_sub)
 
             val standLabel = d.standOrTrackLabel()
@@ -1143,9 +1145,11 @@ class MainActivity : AppCompatActivity() {
                 standView.visibility = View.GONE
             }
 
+            hurryCatView.visibility = if (leaveNow) View.VISIBLE else View.GONE
+
             val parts = mutableListOf<String>()
-            if (activeRem != null) parts.add("🔔 ${ReminderManager.formatClock(activeRem.triggerAtMs)}")
-            if (leaveNow) parts.add("🏃 Leave now")
+            if (activeRem != null) parts.add("⏱ ${ReminderManager.formatClock(activeRem.triggerAtMs)}")
+            if (leaveNow) parts.add("Hurry · leave now!")
             else if (tooTight) parts.add("Too tight (${row.walkMinutes} min walk)")
             if (d.cancelled) parts.add("Cancelled")
             else if (d.delayMinutes > 0) parts.add("+${d.delayMinutes} min")
@@ -1168,7 +1172,7 @@ class MainActivity : AppCompatActivity() {
                 sub.visibility = View.GONE
             }
 
-            metaRow.visibility = if (standLabel.isNotEmpty() || parts.isNotEmpty()) View.VISIBLE else View.GONE
+            metaRow.visibility = if (standLabel.isNotEmpty() || leaveNow || parts.isNotEmpty()) View.VISIBLE else View.GONE
 
             val eta = v.findViewById<TextView>(R.id.dep_eta)
             val etaStr = when {

@@ -16,7 +16,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Feedback &amp; Ideas"
+            android:text="Send Feedback"
             android:textColor="@color/text_primary"
             android:textSize="17sp"
             android:textStyle="bold" />
@@ -77,15 +77,47 @@
     </LinearLayout>
 
     <EditText
+        android:id="@+id/fb_name"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/input_bg"
+        android:hint="Name (optional)"
+        android:imeOptions="actionNext"
+        android:inputType="textPersonName|textCapWords"
+        android:maxLines="1"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:textColor="@color/text_primary"
+        android:textColorHint="@color/text_secondary"
+        android:textSize="13.5sp" />
+
+    <EditText
+        android:id="@+id/fb_stations"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/input_bg"
+        android:hint="Stations you take often (optional)"
+        android:imeOptions="actionNext"
+        android:inputType="textCapWords"
+        android:maxLines="1"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:textColor="@color/text_primary"
+        android:textColorHint="@color/text_secondary"
+        android:textSize="13.5sp" />
+
+    <EditText
         android:id="@+id/fb_input"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="10dp"
         android:background="@drawable/input_bg"
         android:gravity="top|start"
-        android:hint="Share a feature idea, UI tweak, or bug…"
+        android:hint="Your feedback, new idea, or UI/UX suggestion…"
         android:inputType="textMultiLine|textCapSentences"
-        android:maxLines="6"
+        android:maxLines="5"
         android:minLines="3"
         android:padding="12dp"
         android:textColor="@color/text_primary"
@@ -93,14 +125,14 @@
         android:textSize="14sp" />
 
     <TextView
-        android:id="@+id/fb_submit_github"
+        android:id="@+id/fb_submit"
         android:layout_width="match_parent"
         android:layout_height="46dp"
         android:layout_marginTop="14dp"
         android:background="@drawable/btn_primary_bg"
         android:fontFamily="monospace"
         android:gravity="center"
-        android:text="POST ON GITHUB ↗"
+        android:text="SEND FEEDBACK"
         android:textColor="@color/bg_dark"
         android:textSize="12.5sp"
         android:textStyle="bold" />

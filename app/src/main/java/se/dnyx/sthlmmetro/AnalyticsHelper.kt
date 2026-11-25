@@ -166,9 +166,16 @@ object AnalyticsHelper {
         }
     }
 
-    fun logFeedbackSubmitted(context: Context, category: String) {
+    fun logFeedbackSubmitted(
+        context: Context,
+        category: String,
+        stations: String = "",
+        preview: String = ""
+    ) {
         log(context, "feedback_submitted") {
             putString("category", clip(category, 24))
+            if (stations.isNotBlank()) putString("stations", clip(stations, 80))
+            if (preview.isNotBlank()) putString("feedback_preview", clip(preview, 90))
             putString("app_version", BuildConfig.VERSION_NAME)
         }
     }

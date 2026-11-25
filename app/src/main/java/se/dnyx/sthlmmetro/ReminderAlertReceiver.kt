@@ -3,7 +3,6 @@ package se.dnyx.sthlmmetro
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.core.content.ContextCompat
 
 class ReminderAlertReceiver : BroadcastReceiver() {
 
@@ -31,22 +30,8 @@ class ReminderAlertReceiver : BroadcastReceiver() {
             }
         }
 
-        // Update widgets immediately so the 🔔 tag clears from the departed/reminded row
         MetroWidgetProvider.rerenderAllFromCache(context)
-
-        val svcIntent = Intent(context, ReminderChimeService::class.java).apply {
-            action = ReminderChimeService.ACTION_PLAY
-            putExtra(EXTRA_STATION, station)
-            putExtra(EXTRA_LINE, line)
-            putExtra(EXTRA_DEST, dest)
-            putExtra(EXTRA_WALK, walk)
-        }
-        try {
-            ContextCompat.startForegroundService(context, svcIntent)
-        } catch (_: Exception) {
-            // Best-effort fallback if OEM blocks FGS
-            ReminderChimeService.playFallbackVibrateAndNotify(context, station, line, dest, walk)
-        }
+        ReminderManager.postHurryUpNowNotification(context, station, line, dest, walk)
     }
 
     companion object {
