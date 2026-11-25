@@ -145,6 +145,7 @@ class MainActivity : AppCompatActivity() {
                     lastShakeMs = now
                     vibrateShort()
                     Toast.makeText(this@MainActivity, "↻ Shake refresh", Toast.LENGTH_SHORT).show()
+                    MetroWidgetProvider.refreshAllWidgets(this@MainActivity, trigger = "app_shake")
                     if (nearMeMode && nearbyStops.isEmpty()) {
                         requestLocationAndLoad()
                     } else {
@@ -169,6 +170,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         AnalyticsHelper.syncCollectionState(this)
         AppUpdater.cleanupOldApks(this)
+        GloveShakeService.syncState(this)
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
@@ -372,6 +374,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        GloveShakeService.appInForeground = true
         AnalyticsHelper.syncCollectionState(this)
         FeedbackHelper.flushPendingAsync(this)
         activeRemindersMap = WidgetPrefs.loadActiveReminders(this).associateBy { it.key }
@@ -394,6 +397,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        GloveShakeService.appInForeground = false
         super.onPause()
         sensorManager?.unregisterListener(shakeListener)
         uiHandler.removeCallbacks(tickRunnable)

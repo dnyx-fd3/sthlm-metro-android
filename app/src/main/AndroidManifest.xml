@@ -12,6 +12,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <queries>
@@ -85,6 +86,15 @@
             android:name=".ReminderChimeService"
             android:exported="false"
             android:foregroundServiceType="systemExempted" />
+
+        <service
+            android:name=".GloveShakeService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Screen-on wrist shake gesture to refresh transit widgets with winter gloves" />
+        </service>
 
         <receiver
             android:name=".ReminderAlertReceiver"

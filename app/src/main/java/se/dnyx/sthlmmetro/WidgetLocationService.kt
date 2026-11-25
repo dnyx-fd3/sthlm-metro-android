@@ -83,7 +83,8 @@ class WidgetLocationService : Service() {
                         SlApiClient.POPULAR_STATIONS
                     }
 
-                    val nearest = LocationHelper.findNearestStops(loc.latitude, loc.longitude, sites, limit = 1).firstOrNull()
+                    val diverseStops = LocationHelper.findNearestDiverseStops(loc.latitude, loc.longitude, sites, limit = 3)
+                    val nearest = diverseStops.firstOrNull()
                     if (nearest != null) {
                         AnalyticsHelper.logNearMeUsed(this, "widget_silent", nearest.name, nearest.walkMinutes)
                         WidgetPrefs.setResolvedNearMe(
@@ -94,7 +95,8 @@ class WidgetLocationService : Service() {
                                 stationName = nearest.name,
                                 walkMinutes = nearest.walkMinutes,
                                 distanceMeters = nearest.distanceMeters,
-                                updatedAtMs = System.currentTimeMillis()
+                                updatedAtMs = System.currentTimeMillis(),
+                                stops = diverseStops
                             )
                         )
                         MetroWidgetProvider.refreshWidgetBlocking(this, manager, widgetId, trigger = "near_me_silent")

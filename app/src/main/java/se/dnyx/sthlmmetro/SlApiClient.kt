@@ -30,7 +30,12 @@ data class DepartureItem(
     val directionCode: Int,
     val delayMinutes: Int,
     val cancelled: Boolean,
-    val badgeStyle: LineBadgeStyle
+    val badgeStyle: LineBadgeStyle,
+    val originSiteId: Int = 0,
+    val originStationName: String = "",
+    val originWalkMinutes: Int = 0,
+    val originDistanceMeters: Int = 0,
+    val originModeIcon: String = ""
 ) {
     fun standOrTrackLabel(): String {
         val clean = stopPoint.trim()

@@ -231,6 +231,20 @@
             android:layout_marginTop="0dp"
             android:visibility="gone">
 
+            <TextView
+                android:id="@+id/row_0_group_hdr"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="2dp"
+                android:ellipsize="end"
+                android:fontFamily="monospace"
+                android:maxLines="1"
+                android:text="★ CLOSEST · Lektorsstigen · 2 min"
+                android:textColor="@color/widget_accent"
+                android:textSize="9.5sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
             <ImageView
                 android:id="@+id/row_0_bg"
                 android:layout_width="0dp"
@@ -247,6 +261,7 @@
                 android:id="@+id/row_0_content"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_below="@id/row_0_group_hdr"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="8dp"
@@ -332,6 +347,20 @@
             android:layout_marginTop="4dp"
             android:visibility="gone">
 
+            <TextView
+                android:id="@+id/row_1_group_hdr"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="2dp"
+                android:ellipsize="end"
+                android:fontFamily="monospace"
+                android:maxLines="1"
+                android:text="🚌 Stora Lappis · 4 min"
+                android:textColor="@color/widget_text_secondary"
+                android:textSize="9.5sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
             <ImageView
                 android:id="@+id/row_1_bg"
                 android:layout_width="0dp"
@@ -348,6 +377,7 @@
                 android:id="@+id/row_1_content"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_below="@id/row_1_group_hdr"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="8dp"
@@ -433,6 +463,20 @@
             android:layout_marginTop="4dp"
             android:visibility="gone">
 
+            <TextView
+                android:id="@+id/row_2_group_hdr"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="2dp"
+                android:ellipsize="end"
+                android:fontFamily="monospace"
+                android:maxLines="1"
+                android:text="🚇 Universitetet · 12 min"
+                android:textColor="@color/widget_text_secondary"
+                android:textSize="9.5sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
             <ImageView
                 android:id="@+id/row_2_bg"
                 android:layout_width="0dp"
@@ -449,6 +493,7 @@
                 android:id="@+id/row_2_content"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_below="@id/row_2_group_hdr"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="8dp"
@@ -534,6 +579,20 @@
             android:layout_marginTop="4dp"
             android:visibility="gone">
 
+            <TextView
+                android:id="@+id/row_3_group_hdr"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="2dp"
+                android:ellipsize="end"
+                android:fontFamily="monospace"
+                android:maxLines="1"
+                android:text="🚇 Universitetet · 12 min"
+                android:textColor="@color/widget_text_secondary"
+                android:textSize="9.5sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
             <ImageView
                 android:id="@+id/row_3_bg"
                 android:layout_width="0dp"
@@ -550,6 +609,7 @@
                 android:id="@+id/row_3_content"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_below="@id/row_3_group_hdr"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:paddingStart="8dp"

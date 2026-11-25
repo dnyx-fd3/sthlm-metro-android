@@ -438,6 +438,53 @@
                         android:textStyle="bold" />
                 </LinearLayout>
 
+                <!-- Optional Home-Screen Glove Shake Toggle -->
+                <LinearLayout
+                    android:id="@+id/row_glove_shake"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/app_row_bg"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="12dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Glove shake on Home Screen"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="monospace"
+                            android:text="Shake while screen is on to refresh widgets"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/chip_glove_shake"
+                        android:layout_width="54dp"
+                        android:layout_height="34dp"
+                        android:background="@drawable/chip_idle"
+                        android:fontFamily="monospace"
+                        android:gravity="center"
+                        android:text="OFF"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

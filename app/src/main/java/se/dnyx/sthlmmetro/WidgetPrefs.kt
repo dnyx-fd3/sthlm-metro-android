@@ -44,7 +44,8 @@ data class NearbyOverride(
     val stationName: String,
     val walkMinutes: Int,
     val distanceMeters: Int,
-    val updatedAtMs: Long
+    val updatedAtMs: Long,
+    val stops: List<NearbyStop> = emptyList()
 )
 
 data class ActiveReminder(
@@ -110,6 +111,7 @@ object WidgetPrefs {
     private const val KEY_ACTIVE_REMINDERS = "active_reminders_json"
     private const val KEY_NOTIF_PROMPTED = "notif_perm_prompted_v21"
     private const val KEY_AUTO_AM_PM = "auto_am_pm_enabled"
+    private const val KEY_GLOVE_HOME_SHAKE = "glove_home_shake_enabled"
     private const val KEY_STARRED_LINES = "starred_lines_csv"
 
     private const val LEGACY_SLOTS_JSON = "slots_json_"
@@ -147,6 +149,17 @@ object WidgetPrefs {
     fun setAutoAmPmEnabled(context: Context, enabled: Boolean) {
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_AUTO_AM_PM, enabled)
+            .apply()
+    }
+
+    fun isGloveHomeShakeEnabled(context: Context): Boolean {
+        return context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_GLOVE_HOME_SHAKE, false)
+    }
+
+    fun setGloveHomeShakeEnabled(context: Context, enabled: Boolean) {
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_GLOVE_HOME_SHAKE, enabled)
             .apply()
     }
 
@@ -256,12 +269,24 @@ object WidgetPrefs {
     }
 
     fun setResolvedNearMe(context: Context, appWidgetId: Int, override: NearbyOverride) {
+        val stopsArr = JSONArray()
+        for (s in override.stops) {
+            stopsArr.put(
+                JSONObject()
+                    .put("id", s.siteId)
+                    .put("n", s.name)
+                    .put("d", s.distanceMeters)
+                    .put("w", s.walkMinutes)
+                    .put("m", s.modes.joinToString(","))
+            )
+        }
         val json = JSONObject()
             .put("siteId", override.siteId)
             .put("name", override.stationName)
             .put("walkMinutes", override.walkMinutes)
             .put("distMeters", override.distanceMeters)
             .put("updatedAtMs", override.updatedAtMs)
+            .put("stops", stopsArr)
             .toString()
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putString(KEY_NEARBY_OVERRIDE + appWidgetId, json)
@@ -367,12 +392,44 @@ object WidgetPrefs {
             val name = o.optString("name", "")
             val updated = o.optLong("updatedAtMs", 0L)
             if (id <= 0 || name.isEmpty()) return null
+            val walkMin = o.optInt("walkMinutes", 3).coerceIn(1, 99)
+            val distMeters = o.optInt("distMeters", 0)
+
+            val parsedStops = mutableListOf<NearbyStop>()
+            val arr = o.optJSONArray("stops")
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    val so = arr.optJSONObject(i) ?: continue
+                    val sid = so.optInt("id", -1)
+                    val sname = so.optString("n", "")
+                    if (sid > 0 && sname.isNotEmpty()) {
+                        val modes = so.optString("m", "")
+                            .split(",")
+                            .filter { it.isNotEmpty() }
+                            .toSet()
+                        parsedStops.add(
+                            NearbyStop(
+                                siteId = sid,
+                                name = sname,
+                                distanceMeters = so.optInt("d", 0),
+                                walkMinutes = so.optInt("w", 3).coerceIn(1, 99),
+                                modes = modes
+                            )
+                        )
+                    }
+                }
+            }
+            if (parsedStops.isEmpty()) {
+                parsedStops.add(NearbyStop(id, name, distMeters, walkMin))
+            }
+
             NearbyOverride(
                 siteId = id,
                 stationName = name,
-                walkMinutes = o.optInt("walkMinutes", 3).coerceIn(1, 30),
-                distanceMeters = o.optInt("distMeters", 0),
-                updatedAtMs = updated
+                walkMinutes = walkMin,
+                distanceMeters = distMeters,
+                updatedAtMs = updated,
+                stops = parsedStops
             )
         } catch (_: Exception) {
             null
@@ -479,6 +536,11 @@ object WidgetPrefs {
                     .put("delayMinutes", d.delayMinutes)
                     .put("cancelled", d.cancelled)
                     .put("badgeStyle", d.badgeStyle.name)
+                    .put("originSiteId", d.originSiteId)
+                    .put("originStationName", d.originStationName)
+                    .put("originWalkMinutes", d.originWalkMinutes)
+                    .put("originDistanceMeters", d.originDistanceMeters)
+                    .put("originModeIcon", d.originModeIcon)
             )
         }
         val payload = JSONObject()
@@ -517,7 +579,12 @@ object WidgetPrefs {
                         directionCode = item.optInt("directionCode", 0),
                         delayMinutes = item.optInt("delayMinutes", 0),
                         cancelled = item.optBoolean("cancelled", false),
-                        badgeStyle = style
+                        badgeStyle = style,
+                        originSiteId = item.optInt("originSiteId", 0),
+                        originStationName = item.optString("originStationName", ""),
+                        originWalkMinutes = item.optInt("originWalkMinutes", 0),
+                        originDistanceMeters = item.optInt("originDistanceMeters", 0),
+                        originModeIcon = item.optString("originModeIcon", "")
                     )
                 )
             }

@@ -24,6 +24,7 @@ import java.net.UnknownHostException
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 
 open class MetroWidgetProvider : AppWidgetProvider() {
@@ -283,11 +284,13 @@ open class MetroWidgetProvider : AppWidgetProvider() {
         private const val REFRESH_COOLDOWN_MS = 5_000L
 
         private val executor = Executors.newSingleThreadExecutor()
+        private val nearbyFetchPool = Executors.newFixedThreadPool(3)
         private val mainHandler = Handler(Looper.getMainLooper())
         private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
         private val TAB_IDS = intArrayOf(R.id.widget_tab_0, R.id.widget_tab_1, R.id.widget_tab_2)
         private val ROW_IDS = intArrayOf(R.id.row_0, R.id.row_1, R.id.row_2, R.id.row_3)
+        private val GROUP_HDR_IDS = intArrayOf(R.id.row_0_group_hdr, R.id.row_1_group_hdr, R.id.row_2_group_hdr, R.id.row_3_group_hdr)
         private val ROW_BG_IDS = intArrayOf(R.id.row_0_bg, R.id.row_1_bg, R.id.row_2_bg, R.id.row_3_bg)
         private val BADGE_IDS = intArrayOf(R.id.row_0_badge, R.id.row_1_badge, R.id.row_2_badge, R.id.row_3_badge)
         private val DEST_IDS = intArrayOf(R.id.row_0_dest, R.id.row_1_dest, R.id.row_2_dest, R.id.row_3_dest)
@@ -372,11 +375,16 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             AnalyticsHelper.logWidgetRefreshed(context, eff, cfg.activeSlotIndex, trigger)
 
             try {
-                val fetched = try {
-                    SlApiClient.fetchDepartures(eff.siteId, eff.filter, limit = 20)
-                } catch (_: IOException) {
-                    Thread.sleep(1200L)
-                    SlApiClient.fetchDepartures(eff.siteId, eff.filter, limit = 20)
+                val multiStops = if (cfg.isActiveNearMe) cfg.resolvedNearMe?.stops.orEmpty() else emptyList()
+                val fetched: List<DepartureItem> = if (multiStops.size > 1) {
+                    fetchGroupedNearMeDepartures(multiStops, eff.filter)
+                } else {
+                    try {
+                        SlApiClient.fetchDepartures(eff.siteId, eff.filter, limit = 20)
+                    } catch (_: IOException) {
+                        Thread.sleep(1200L)
+                        SlApiClient.fetchDepartures(eff.siteId, eff.filter, limit = 20)
+                    }
                 }
                 val fetchedAtMs = System.currentTimeMillis()
                 WidgetPrefs.saveCache(
@@ -496,9 +504,114 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             appWidgetManager.updateAppWidget(appWidgetId, views)
         }
 
+        private fun fetchGroupedNearMeDepartures(stops: List<NearbyStop>, slotFilter: ModeFilter): List<DepartureItem> {
+            val effectiveFilter = if (slotFilter == ModeFilter.AUTO) ModeFilter.ALL else slotFilter
+            val nowMs = System.currentTimeMillis()
+            val futures = stops.take(3).map { stop ->
+                stop to nearbyFetchPool.submit(Callable {
+                    SlApiClient.fetchDepartures(stop.siteId, effectiveFilter, limit = 10)
+                })
+            }
+
+            val combined = mutableListOf<DepartureItem>()
+            var lastError: Exception? = null
+            var anySucceeded = false
+
+            for ((stop, future) in futures) {
+                try {
+                    val raw = future.get()
+                    anySucceeded = true
+                    val catchable = raw.filter { d ->
+                        !d.cancelled && (d.expectedEpochMs <= 0L || ((d.expectedEpochMs - nowMs) / 1000L) >= stop.walkMinutes * 60L - 25L)
+                    }
+                    val chosen = (if (catchable.isNotEmpty()) catchable else raw).take(4)
+                    val icon = stop.modeIcon()
+                    chosen.forEach { d ->
+                        combined.add(
+                            d.copy(
+                                originSiteId = stop.siteId,
+                                originStationName = stop.name,
+                                originWalkMinutes = stop.walkMinutes,
+                                originDistanceMeters = stop.distanceMeters,
+                                originModeIcon = icon
+                            )
+                        )
+                    }
+                } catch (e: java.util.concurrent.ExecutionException) {
+                    lastError = (e.cause as? Exception) ?: e
+                } catch (e: Exception) {
+                    lastError = e
+                }
+            }
+
+            if (!anySucceeded && lastError != null) {
+                throw lastError
+            }
+            return combined
+        }
+
+        private fun selectWidgetShownRows(upcoming: List<DepartureItem>, maxRows: Int): List<DepartureItem> {
+            val groupedOrigins = upcoming.map { it.originSiteId }.filter { it > 0 }.distinct()
+            if (groupedOrigins.size <= 1) {
+                return upcoming.take(maxRows)
+            }
+
+            val byStop = groupedOrigins.associateWith { sid ->
+                upcoming.filter { it.originSiteId == sid }
+            }
+
+            if (maxRows <= 2) {
+                val firstStopId = groupedOrigins.first()
+                val railStopId = groupedOrigins.drop(1).firstOrNull { sid ->
+                    byStop[sid].orEmpty().any { it.transportMode in setOf("METRO", "TRAIN", "TRAM") }
+                } ?: groupedOrigins.getOrNull(1)
+
+                val out = mutableListOf<DepartureItem>()
+                byStop[firstStopId]?.firstOrNull()?.let { out.add(it) }
+                if (railStopId != null) {
+                    byStop[railStopId]?.firstOrNull()?.let { out.add(it) }
+                }
+                if (out.size < maxRows) {
+                    upcoming.filterNot { it in out }.take(maxRows - out.size).forEach { out.add(it) }
+                }
+                return out
+            }
+
+            // For 4-row BOARD: take 1st departure of each stop (in nearest-first order), then fill remaining slot(s)
+            // keeping rows from the same stop adjacent!
+            val counts = linkedMapOf<Int, Int>()
+            for (sid in groupedOrigins) {
+                if (counts.values.sum() >= maxRows) break
+                if (!byStop[sid].isNullOrEmpty()) counts[sid] = 1
+            }
+            // Give extra slot(s) first to a rail hub (or closest stop) if available
+            val priorityOrder = groupedOrigins.sortedByDescending { sid ->
+                byStop[sid].orEmpty().any { it.transportMode in setOf("METRO", "TRAIN") }
+            }
+            for (sid in priorityOrder) {
+                while (counts.values.sum() < maxRows && (counts[sid] ?: 0) < byStop[sid].orEmpty().size) {
+                    counts[sid] = (counts[sid] ?: 0) + 1
+                }
+            }
+
+            val ordered = mutableListOf<DepartureItem>()
+            for (sid in groupedOrigins) {
+                val takeCount = counts[sid] ?: 0
+                if (takeCount > 0) {
+                    ordered.addAll(byStop[sid].orEmpty().take(takeCount))
+                }
+            }
+            return ordered.take(maxRows)
+        }
+
         private fun buildHeaderMeta(cfg: WidgetConfig, syncClock: String): String {
-            return if (cfg.isActiveNearMe && cfg.resolvedNearMe != null) {
-                "📍 ${cfg.resolvedNearMe.walkMinutes} min walk · $syncClock"
+            val near = cfg.resolvedNearMe
+            return if (cfg.isActiveNearMe && near != null) {
+                if (near.stops.size > 1) {
+                    "Closest: ${shortenTabLabel(near.stationName)} (${near.walkMinutes} min) · $syncClock"
+                } else {
+                    "📍 ${near.walkMinutes} min walk · $syncClock"
+                }
             } else {
                 syncClock
             }
@@ -757,20 +870,57 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             views.setViewVisibility(R.id.widget_status_text, View.GONE)
             views.setViewVisibility(R.id.widget_cat_empty, View.GONE)
 
-            val shown = upcoming.take(maxRows)
+            val shown = selectWidgetShownRows(upcoming, maxRows)
+            val isGroupedNearMe = shown.map { it.originSiteId }.filter { it > 0 }.distinct().size > 1
+            val closestOriginId = shown.firstOrNull()?.originSiteId ?: 0
+
             for (i in 0 until maxRows) {
                 if (i < shown.size) {
                     val d = shown[i]
-                    val remKey = ReminderManager.buildKey(eff.siteId, d.designation, d.destination, d.expectedEpochMs)
+                    val rowSiteId = if (d.originSiteId > 0) d.originSiteId else eff.siteId
+                    val rowStation = d.originStationName.ifEmpty { eff.stationName }
+                    val rowWalkMin = if (d.originSiteId > 0) d.originWalkMinutes else eff.walkMinutes
+
+                    val remKey = ReminderManager.buildKey(rowSiteId, d.designation, d.destination, d.expectedEpochMs)
                     val activeRem = remindersMap[remKey]
 
                     views.setViewVisibility(ROW_IDS[i], View.VISIBLE)
+
+                    val showGroupHeader = isGroupedNearMe &&
+                        d.originStationName.isNotEmpty() &&
+                        (i == 0 || shown[i - 1].originSiteId != d.originSiteId)
+
+                    if (showGroupHeader) {
+                        val isClosest = d.originSiteId == closestOriginId
+                        val iconPrefix = if (d.originModeIcon.isNotEmpty()) "${d.originModeIcon} " else ""
+                        val distPart = if (d.originDistanceMeters > 0) {
+                            "${LocationHelper.formatDistance(d.originDistanceMeters)} · "
+                        } else {
+                            ""
+                        }
+                        val hdrText = if (isClosest) {
+                            "★ CLOSEST · $iconPrefix${shortenTabLabel(d.originStationName)} · $distPart${d.originWalkMinutes} min"
+                        } else {
+                            "$iconPrefix${shortenTabLabel(d.originStationName)} · $distPart${d.originWalkMinutes} min"
+                        }
+                        views.setViewVisibility(GROUP_HDR_IDS[i], View.VISIBLE)
+                        views.setTextViewText(GROUP_HDR_IDS[i], hdrText)
+                        applyTextColor(
+                            context,
+                            views,
+                            GROUP_HDR_IDS[i],
+                            if (isClosest) palette.accent else palette.textSecondary
+                        )
+                    } else {
+                        views.setViewVisibility(GROUP_HDR_IDS[i], View.GONE)
+                    }
+
                     views.setTextViewText(BADGE_IDS[i], d.designation)
                     views.setInt(BADGE_IDS[i], "setBackgroundResource", badgeDrawableFor(d.badgeStyle))
                     views.setTextViewText(DEST_IDS[i], d.destination)
                     applyTextColor(context, views, DEST_IDS[i], if (d.cancelled) palette.cancel else palette.textPrimary)
 
-                    // Show Stand/Track, 🔔 HH:mm when reminded, or delay/cancel status
+                    // Show Stand/Track, ⏱ HH:mm when reminded, or delay/cancel status
                     val subParts = mutableListOf<String>()
                     val standStr = d.standOrTrackLabel()
                     if (standStr.isNotEmpty()) {
@@ -824,13 +974,14 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                         applyTextColor(context, views, ETA_IDS[i], etaColor)
                     }
 
-                    // 1-tap row toggles 🔔 reminder SILENTLY inside the widget!
+                    val rowEffSlot = StationSlot(rowSiteId, rowStation, eff.filter, rowWalkMin)
                     views.setOnClickPendingIntent(
                         ROW_IDS[i],
-                        toggleReminderPendingIntent(context, appWidgetId, eff, d, rowIndex = i)
+                        toggleReminderPendingIntent(context, appWidgetId, rowEffSlot, d, rowIndex = i)
                     )
                 } else {
                     views.setChronometer(CHRONO_IDS[i], elapsedNow, null, false)
+                    views.setViewVisibility(GROUP_HDR_IDS[i], View.GONE)
                     views.setViewVisibility(ROW_IDS[i], View.GONE)
                 }
             }
@@ -874,10 +1025,11 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             }
 
             val eff = cfg.effectiveSlot
-            val stationHeader = if (cfg.isActiveNearMe && cfg.resolvedNearMe != null) {
-                "📍 ${eff.stationName}"
-            } else {
-                eff.stationName
+            val near = cfg.resolvedNearMe
+            val stationHeader = when {
+                cfg.isActiveNearMe && near != null && near.stops.size > 1 -> "📍 Near me"
+                cfg.isActiveNearMe && near != null -> "📍 ${eff.stationName}"
+                else -> eff.stationName
             }
             views.setTextViewText(R.id.widget_station_name, stationHeader)
             applyTextColor(context, views, R.id.widget_station_name, palette.textPrimary)
