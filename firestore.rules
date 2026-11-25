@@ -1,0 +1,137 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// This security rules file assumes the following data structures:
+//
+// Collection: feedback
+// Document ID: {feedbackId} (auto-generated via Firestore REST POST)
+// Access Pattern:
+//   - Write-only public dropbox for unauthenticated T-Radar Android clients
+//     (POST /v1/projects/t-radar-53ccc/databases/(default)/documents/feedback).
+//   - Client reads, updates, and deletes are strictly forbidden; submissions
+//     are reviewed exclusively by project owners in the Firebase Console.
+// Fields (all 7 required on create; immutable because updates are denied):
+//   - category: string (required, enum ['Idea', 'UI/UX', 'Bug'], 1..30 chars) - feedback category tag
+//   - name: string (required key, optional user input, 0..120 chars) - optional sender display name (may be "")
+//   - frequentStations: string (required key, optional user input, 0..300 chars) - optional frequent stations text (may be "")
+//   - message: string (required, non-empty, 1..4000 chars) - feedback message body
+//   - appVersion: string (required, 1..60 chars) - app version string, e.g. "2.4.0 (24)"
+//   - androidVersion: string (required, 0..80 chars) - OS/SDK string, e.g. "Android 15 (SDK 35)"
+//   - createdAt: timestamp (required, >= 2024-01-01 and <= request.time + 1d) - submission timestamp (supports offline queue replay)
+//
+// All other collections and subcollections are denied by default.
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    // Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if user owns the resource (for user-owned documents)
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Verify UID hasn't been tampered with on create
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) ||
+        request.resource.data.uid == request.auth.uid;
+    }
+
+    // Ensure uid field is not modified on update
+    function uidNotModified() {
+      return !('uid' in request.resource.data) ||
+        request.resource.data.uid == resource.data.uid;
+    }
+
+    // Validate required fields exist
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // Validate that the document contains only the allowed fields
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Validate string type and character length bounds
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidFeedbackCategory(category) {
+      return category is string &&
+        category.size() >= 1 &&
+        category.size() <= 30 &&
+        category in ['Idea', 'UI/UX', 'Bug'];
+    }
+
+    // Allows offline-queued feedback (FeedbackHelper.flushPendingAsync) created
+    // in the past while blocking far-future timestamps that could pin spam to
+    // the top of Firebase Console views.
+    function isValidFeedbackTimestamp(ts) {
+      return ts is timestamp &&
+        ts >= timestamp.date(2024, 1, 1) &&
+        ts <= request.time + duration.value(1, 'd');
+    }
+
+    function isValidFeedback(data) {
+      let allowedFields = [
+        'category',
+        'name',
+        'frequentStations',
+        'message',
+        'appVersion',
+        'androidVersion',
+        'createdAt'
+      ];
+      return hasRequiredFields(allowedFields) &&
+        hasOnlyAllowedFields(allowedFields) &&
+        isValidFeedbackCategory(data.category) &&
+        validStringLength('name', 0, 120) &&
+        validStringLength('frequentStations', 0, 300) &&
+        validStringLength('message', 1, 4000) &&
+        validStringLength('appVersion', 1, 60) &&
+        validStringLength('androidVersion', 0, 80) &&
+        isValidFeedbackTimestamp(data.createdAt);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /feedback/{feedbackId} {
+      // Unauthenticated write-only feedback dropbox.
+      // Note: attempting to overwrite an existing feedbackId via REST/SDK is
+      // evaluated as an `update` by Firestore and is denied below.
+      allow create: if feedbackId.size() >= 1 &&
+        feedbackId.size() <= 128 &&
+        isValidFeedback(request.resource.data);
+
+      // Submissions may include optional sender names and are never readable,
+      // modifiable, or deletable from client SDKs or the REST API.
+      allow read, update, delete: if false;
+    }
+
+    // Default deny for all other collections, documents, and subcollections.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

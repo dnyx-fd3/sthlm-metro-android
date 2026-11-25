@@ -115,8 +115,9 @@ object FeedbackHelper {
                 return@setOnClickListener
             }
 
-            val name = nameInput.text?.toString().orEmpty().trim()
-            val stations = stationsInput.text?.toString().orEmpty().trim()
+            val name = nameInput.text?.toString().orEmpty().trim().take(120)
+            val stations = stationsInput.text?.toString().orEmpty().trim().take(300)
+            val clippedMsg = message.take(4000)
             prefs.edit()
                 .putString(KEY_SAVED_NAME, name)
                 .putString(KEY_SAVED_STATIONS, stations)
@@ -129,9 +130,9 @@ object FeedbackHelper {
                 .put("category", selectedType.tag)
                 .put("name", name)
                 .put("frequentStations", stations)
-                .put("message", message)
-                .put("appVersion", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-                .put("androidVersion", "Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
+                .put("message", clippedMsg)
+                .put("appVersion", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})".take(60))
+                .put("androidVersion", "Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})".take(80))
                 .put("createdAt", Instant.now().toString())
 
             AnalyticsHelper.logFeedbackSubmitted(
