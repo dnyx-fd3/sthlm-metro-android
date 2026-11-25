@@ -27,10 +27,13 @@ jobs:
           gradle-version: '8.10.2'
 
       - name: Prepare optional signing keystore
-        if: ${{ secrets.SIGNING_KEYSTORE_B64 != '' }}
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
         run: |
-          echo "${{ secrets.SIGNING_KEYSTORE_B64 }}" | base64 -d > "$RUNNER_TEMP/signing.keystore"
-          echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/signing.keystore" >> "$GITHUB_ENV"
+          if [ -n "$SIGNING_KEYSTORE_B64" ]; then
+            echo "$SIGNING_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/signing.keystore"
+            echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/signing.keystore" >> "$GITHUB_ENV"
+          fi
 
       - name: Build Android APK
         env:
