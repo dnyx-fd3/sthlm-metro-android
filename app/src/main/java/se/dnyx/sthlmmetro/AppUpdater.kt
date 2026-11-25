@@ -47,8 +47,11 @@ object AppUpdater {
         executor.execute {
             try {
                 val dir = File(context.applicationContext.cacheDir, "updates")
+                val now = System.currentTimeMillis()
                 if (dir.exists()) {
-                    dir.listFiles()?.forEach { it.delete() }
+                    dir.listFiles()?.forEach {
+                        if (now - it.lastModified() > 3_600_000L) it.delete()
+                    }
                 }
             } catch (_: Exception) {
                 // Ignore
@@ -159,7 +162,7 @@ object AppUpdater {
         primaryBtn: TextView
     ) {
         if (!activity.packageManager.canRequestPackageInstalls()) {
-            Toast.makeText(activity, "Allow T-Radar to install updates, then tap Download again.", Toast.LENGTH_LONG).show()
+            Toast.makeText(activity, "Allow app installs, then tap Install.", Toast.LENGTH_LONG).show()
             try {
                 activity.startActivity(
                     Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}"))
@@ -217,6 +220,9 @@ object AppUpdater {
                                 }
                             }
                         }
+                    }
+                    if (total > 0 && downloaded != total) {
+                        throw IllegalStateException("Incomplete download ($downloaded/$total)")
                     }
                 } finally {
                     conn.disconnect()

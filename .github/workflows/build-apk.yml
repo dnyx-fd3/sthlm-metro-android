@@ -26,7 +26,17 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - name: Prepare optional signing keystore
+        if: ${{ secrets.SIGNING_KEYSTORE_B64 != '' }}
+        run: |
+          echo "${{ secrets.SIGNING_KEYSTORE_B64 }}" | base64 -d > "$RUNNER_TEMP/signing.keystore"
+          echo "SIGNING_KEYSTORE_PATH=$RUNNER_TEMP/signing.keystore" >> "$GITHUB_ENV"
+
       - name: Build Android APK
+        env:
+          SIGNING_STORE_PASS: ${{ secrets.SIGNING_STORE_PASS }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASS: ${{ secrets.SIGNING_KEY_PASS }}
         run: |
           PROJECT_FILE=$(find . -maxdepth 3 -name 'settings.gradle.kts' | head -n 1)
           if [ -z "$PROJECT_FILE" ]; then

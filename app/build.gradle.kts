@@ -14,11 +14,33 @@ android {
         applicationId = "se.dnyx.sthlmmetro"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
+        val ciRun = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
+        versionCode = if (ciRun != null) 100 + ciRun else 9
         versionName = "2.1.0"
 
         buildConfigField("long", "BUILD_TIME_MS", "${System.currentTimeMillis()}L")
         buildConfigField("String", "GITHUB_REPO", "\"dnyx-fd3/sthlm-metro-android\"")
+    }
+
+    signingConfigs {
+        getByName("debug") {
+            val ciKeystore = System.getenv("SIGNING_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+            if (ciKeystore != null && file(ciKeystore).exists()) {
+                storeFile = file(ciKeystore)
+                storePassword = System.getenv("SIGNING_STORE_PASS") ?: "android"
+                keyAlias = System.getenv("SIGNING_KEY_ALIAS") ?: "androiddebugkey"
+                keyPassword = System.getenv("SIGNING_KEY_PASS") ?: "android"
+            } else {
+                val repoKeystore = file("debug.keystore")
+                if (repoKeystore.exists()) {
+                    storeFile = repoKeystore
+                    storeType = "PKCS12"
+                    storePassword = "android"
+                    keyAlias = "androiddebugkey"
+                    keyPassword = "android"
+                }
+            }
+        }
     }
 
     buildFeatures {
