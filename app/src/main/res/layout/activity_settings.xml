@@ -68,13 +68,13 @@
             android:paddingEnd="16dp"
             android:paddingBottom="24dp">
 
-            <!-- SECTION 1: MY 3 COMMUTE STOPS -->
+            <!-- SECTION 1: STOPS -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:fontFamily="monospace"
                 android:letterSpacing="0.1"
-                android:text="COMMUTE STOPS"
+                android:text="STOPS"
                 android:textColor="@color/cyan_accent"
                 android:textSize="11sp"
                 android:textStyle="bold" />
@@ -268,7 +268,7 @@
                         android:layout_weight="1"
                         android:background="@drawable/chip_active"
                         android:gravity="center"
-                        android:text="Auto Wallpaper"
+                        android:text="Auto"
                         android:textColor="@color/bg_dark"
                         android:textSize="11sp"
                         android:textStyle="bold" />
@@ -338,14 +338,14 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- SECTION 3: WIDGET SETUP GUIDE + 1-TAP PIN -->
+            <!-- SECTION 3: WIDGET -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="18dp"
                 android:fontFamily="monospace"
                 android:letterSpacing="0.1"
-                android:text="WIDGET SETUP"
+                android:text="HOME WIDGET"
                 android:textColor="@color/cyan_accent"
                 android:textSize="11sp"
                 android:textStyle="bold" />
@@ -366,13 +366,13 @@
                     <TextView
                         android:id="@+id/btn_pin_board"
                         android:layout_width="0dp"
-                        android:layout_height="40dp"
+                        android:layout_height="38dp"
                         android:layout_marginEnd="8dp"
                         android:layout_weight="1"
                         android:background="@drawable/btn_primary_bg"
                         android:fontFamily="monospace"
                         android:gravity="center"
-                        android:text="+ BOARD (4×2/3)"
+                        android:text="+ BOARD"
                         android:textColor="@color/bg_dark"
                         android:textSize="11sp"
                         android:textStyle="bold" />
@@ -380,12 +380,12 @@
                     <TextView
                         android:id="@+id/btn_pin_mini"
                         android:layout_width="0dp"
-                        android:layout_height="40dp"
+                        android:layout_height="38dp"
                         android:layout_weight="1"
                         android:background="@drawable/btn_secondary_bg"
                         android:fontFamily="monospace"
                         android:gravity="center"
-                        android:text="+ MINI (4×1)"
+                        android:text="+ MINI 4×1"
                         android:textColor="@color/cyan_accent"
                         android:textSize="11sp"
                         android:textStyle="bold" />
@@ -394,11 +394,12 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:lineSpacingExtra="4dp"
-                    android:text="1. Long-press Home Screen → Widgets → T-Radar\n2. Drag edges to resize between 4×1, 4×2, or 4×3\n3. Set any stop above to 📍 Near me for silent GPS\n4. Tap any departure row on the widget to toggle 🔔"
+                    android:layout_marginTop="10dp"
+                    android:fontFamily="monospace"
+                    android:gravity="center"
+                    android:text="Tap widget row to 🔔 · Resize 4×1–4×3"
                     android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
+                    android:textSize="11sp" />
             </LinearLayout>
 
             <!-- SECTION 4: APP & UPDATES -->
@@ -440,7 +441,7 @@
                             android:id="@+id/set_update_title"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Check for updates"
+                            android:text="Updates"
                             android:textColor="@color/text_primary"
                             android:textSize="14sp"
                             android:textStyle="bold" />
@@ -450,7 +451,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:fontFamily="monospace"
-                            android:text="T-Radar v2.0.0"
+                            android:text="v2.1.0"
                             android:textColor="@color/text_secondary"
                             android:textSize="11sp" />
                     </LinearLayout>
@@ -460,7 +461,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:fontFamily="monospace"
-                        android:text="CHECK →"
+                        android:text="CHECK"
                         android:textColor="@color/cyan_accent"
                         android:textSize="11sp"
                         android:textStyle="bold" />

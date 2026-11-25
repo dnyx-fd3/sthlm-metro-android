@@ -112,8 +112,8 @@ object WidgetPrefs {
     private const val LEGACY_SLOTS_JSON = "slots_json_"
     private const val LEGACY_OPACITY = "opacity_pct_"
 
-    private const val KEY_SITES_JSON = "cached_sites_v2_json"
-    private const val KEY_SITES_FETCHED_MS = "cached_sites_v2_ms"
+    private const val KEY_SITES_JSON = "cached_sites_v3_json"
+    private const val KEY_SITES_FETCHED_MS = "cached_sites_v3_ms"
     private const val SITES_CACHE_TTL_MS = 7L * 24L * 60L * 60L * 1000L
 
     const val NEAR_ME_SITE_ID = -100
@@ -363,6 +363,9 @@ object WidgetPrefs {
             if (!s.lat.isNaN() && !s.lon.isNaN()) {
                 o.put("la", s.lat).put("lo", s.lon)
             }
+            if (s.modes.isNotEmpty()) {
+                o.put("m", s.modes.joinToString(","))
+            }
             arr.put(o)
         }
         context.applicationContext.getSharedPreferences(CACHE_PREFS_NAME, Context.MODE_PRIVATE).edit()
@@ -384,13 +387,20 @@ object WidgetPrefs {
                 val id = o.optInt("id", -1)
                 val name = o.optString("n", "")
                 if (id > 0 && name.isNotEmpty()) {
+                    val modesStr = o.optString("m", "")
+                    val modes = if (modesStr.isNotEmpty()) {
+                        modesStr.split(",").filter { it.isNotEmpty() }.toSet()
+                    } else {
+                        emptySet()
+                    }
                     out.add(
                         StationOption(
                             siteId = id,
                             name = name,
                             subtitle = "SL #$id",
                             lat = o.optDouble("la", Double.NaN),
-                            lon = o.optDouble("lo", Double.NaN)
+                            lon = o.optDouble("lo", Double.NaN),
+                            modes = modes
                         )
                     )
                 }

@@ -195,17 +195,17 @@ open class MetroWidgetProvider : AppWidgetProvider() {
 
         val toastMsg = when (result) {
             is ReminderToggleResult.Scheduled ->
-                "🔔 Ring at ${result.ringTimeStr} (${walkMin}m before $designation → $destination)"
+                "🔔 ${result.ringTimeStr} · $designation → $destination"
             is ReminderToggleResult.Cancelled ->
-                "🔕 Reminder cancelled"
+                "🔕 Cancelled"
             is ReminderToggleResult.TooClose -> {
                 val mins = result.remainingSeconds / 60
                 val secs = result.remainingSeconds % 60
                 val timeStr = if (mins > 0) "${mins}m ${secs}s" else "${secs}s"
-                "🏃 Leaves in $timeStr — leave now!"
+                "🏃 Leaves in $timeStr"
             }
             is ReminderToggleResult.Departed ->
-                "Already departed — tap ↻"
+                "Departed · tap ↻"
         }
 
         mainHandler.post {

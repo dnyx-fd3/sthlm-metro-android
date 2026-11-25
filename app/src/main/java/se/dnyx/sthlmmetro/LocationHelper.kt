@@ -20,8 +20,17 @@ data class NearbyStop(
     val siteId: Int,
     val name: String,
     val distanceMeters: Int,
-    val walkMinutes: Int
-)
+    val walkMinutes: Int,
+    val modes: Set<String> = emptySet()
+) {
+    fun modeIcon(): String = when {
+        "METRO" in modes -> "🚇"
+        "TRAIN" in modes -> "🚆"
+        "TRAM" in modes -> "🚊"
+        "SHIP" in modes -> "⛴"
+        else -> "🚌"
+    }
+}
 
 object LocationHelper {
     private val locExecutor = Executors.newSingleThreadExecutor()
@@ -101,12 +110,56 @@ object LocationHelper {
     fun findNearestStops(lat: Double, lon: Double, sites: List<StationOption>, limit: Int = 4): List<NearbyStop> {
         val candidates = sites.filter { !it.lat.isNaN() && !it.lon.isNaN() }
         val source = candidates.ifEmpty { SlApiClient.POPULAR_STATIONS }
+        val popularModes = SlApiClient.POPULAR_STATIONS.associate { it.siteId to it.modes }
         return source.map { s ->
             val dist = haversineMeters(lat, lon, s.lat, s.lon)
             // Account for street detours (1.25x) at ~80 m/min walking pace
             val walkMin = ((dist * 1.25) / 80.0).roundToInt().coerceIn(1, 30)
-            NearbyStop(s.siteId, s.name, dist.roundToInt(), walkMin)
+            val mergedModes = if (s.modes.isNotEmpty()) s.modes else (popularModes[s.siteId] ?: emptySet())
+            NearbyStop(s.siteId, s.name, dist.roundToInt(), walkMin, mergedModes)
         }.sortedBy { it.distanceMeters }.take(limit)
+    }
+
+    /**
+     * Picks nearby stops across different transit modes (e.g. nearest bus stops plus
+     * nearest Metro/Train/Tram within walking range) so local bus stops don't crowd out
+     * a nearby rail hub like Universitetet when in Lappis.
+     */
+    fun findNearestDiverseStops(lat: Double, lon: Double, sites: List<StationOption>, limit: Int = 4): List<NearbyStop> {
+        val allSorted = findNearestStops(lat, lon, sites, limit = Int.MAX_VALUE)
+        if (allSorted.isEmpty()) return emptyList()
+
+        val chosen = linkedMapOf<Int, NearbyStop>()
+        fun addStop(stop: NearbyStop?) {
+            if (stop != null && chosen.size < limit) {
+                chosen.putIfAbsent(stop.siteId, stop)
+            }
+        }
+
+        // 1. Always include the single closest stop
+        addStop(allSorted.first())
+
+        // 2. Include nearest Metro within 3.5 km
+        val nearestMetro = allSorted.firstOrNull { "METRO" in it.modes && it.distanceMeters <= 3500 }
+        addStop(nearestMetro)
+
+        // 3. Include nearest Train (Pendel / Roslagsbanan) within 3.5 km if not already covered
+        if (chosen.values.none { "TRAIN" in it.modes }) {
+            addStop(allSorted.firstOrNull { "TRAIN" in it.modes && it.distanceMeters <= 3500 })
+        }
+
+        // 4. Include nearest Tram or Ferry within 1.8 km if not already covered
+        if (chosen.values.none { "TRAM" in it.modes || "SHIP" in it.modes }) {
+            addStop(allSorted.firstOrNull { ("TRAM" in it.modes || "SHIP" in it.modes) && it.distanceMeters <= 1800 })
+        }
+
+        // 5. Fill remaining slots with the closest local stops (e.g. Lektorsstigen + Stora Lappis)
+        for (stop in allSorted) {
+            if (chosen.size >= limit) break
+            addStop(stop)
+        }
+
+        return chosen.values.sortedBy { it.distanceMeters }
     }
 
     private fun haversineMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {

@@ -123,11 +123,11 @@ class DepartureReminderActivity : AppCompatActivity() {
             return
         }
 
-        countdownBanner.text = "Departs in ${formatDuration(remainingSec)}"
+        countdownBanner.text = "In ${formatDuration(remainingSec)}"
         val active = existingReminder()
         if (active != null) {
             val ringStr = ReminderManager.formatClock(active.triggerAtMs)
-            setTimerBtn.text = "🔕 CANCEL REMINDER ($ringStr)"
+            setTimerBtn.text = "🔕 CANCEL · $ringStr"
             return
         }
 
@@ -137,9 +137,9 @@ class DepartureReminderActivity : AppCompatActivity() {
                 .atZone(ZoneId.systemDefault())
                 .toLocalTime()
                 .format(clockFmt)
-            setTimerBtn.text = "🔔 CHIME IN ${formatDuration(timerSec)} ($ringAtStr)"
+            setTimerBtn.text = "🔔 CHIME · $ringAtStr (${formatDuration(timerSec)})"
         } else {
-            setTimerBtn.text = "🏃 LEAVE NOW (${formatDuration(remainingSec)})"
+            setTimerBtn.text = "🏃 LEAVE NOW · ${formatDuration(remainingSec)}"
         }
     }
 
@@ -148,7 +148,7 @@ class DepartureReminderActivity : AppCompatActivity() {
         if (active != null) {
             ReminderManager.cancelReminder(this, active.key)
             MetroWidgetProvider.rerenderAllFromCache(this)
-            Toast.makeText(this, "🔕 Reminder cancelled", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "🔕 Cancelled", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -166,10 +166,10 @@ class DepartureReminderActivity : AppCompatActivity() {
         when (res) {
             is ReminderToggleResult.Scheduled -> {
                 MetroWidgetProvider.rerenderAllFromCache(this)
-                Toast.makeText(this, "🔔 Chime set for ${res.ringTimeStr}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "🔔 Chime · ${res.ringTimeStr}", Toast.LENGTH_SHORT).show()
             }
             is ReminderToggleResult.TooClose -> {
-                Toast.makeText(this, "🏃 Leaves in ${formatDuration(res.remainingSeconds)} — head out now!", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "🏃 Leaves in ${formatDuration(res.remainingSeconds)}", Toast.LENGTH_LONG).show()
             }
             else -> Unit
         }

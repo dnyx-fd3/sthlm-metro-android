@@ -54,7 +54,7 @@
         android:background="@drawable/chip_radar_bg"
         android:fontFamily="monospace"
         android:gravity="center"
-        android:text="📍 USE NEAR ME (AUTO GPS)"
+        android:text="📍 Near me (GPS)"
         android:textColor="@color/cyan_accent"
         android:textSize="12sp"
         android:textStyle="bold" />
@@ -139,7 +139,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Walk reminder"
+            android:text="Walk"
             android:textColor="@color/text_secondary"
             android:textSize="12sp" />
 
@@ -183,7 +183,7 @@
         android:layout_height="42dp"
         android:layout_marginTop="10dp"
         android:background="@drawable/input_bg"
-        android:hint="Or search any SL stop…"
+        android:hint="Search stops…"
         android:imeOptions="actionSearch"
         android:inputType="text"
         android:maxLines="1"

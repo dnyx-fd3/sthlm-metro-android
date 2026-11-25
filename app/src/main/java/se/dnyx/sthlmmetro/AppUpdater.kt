@@ -116,16 +116,16 @@ object AppUpdater {
             }
 
             if (info.isNewer && !info.apkDownloadUrl.isNullOrEmpty()) {
-                titleView.text = "Update ready (${info.tagName})"
-                bodyView.text = "Installed: v${BuildConfig.VERSION_NAME}\nLatest: ${info.tagName} ($sizeMb)"
-                primaryBtn.text = "⬇ DOWNLOAD & INSTALL"
+                titleView.text = "Update ${info.tagName}"
+                bodyView.text = "Installed: v${BuildConfig.VERSION_NAME} ($sizeMb)"
+                primaryBtn.text = "⬇ INSTALL"
                 primaryBtn.setOnClickListener {
                     startDownload(activity, dialog, info.apkDownloadUrl, titleView, bodyView, progressBar, primaryBtn)
                 }
             } else {
-                titleView.text = "You're up to date!"
-                bodyView.text = "Installed: v${BuildConfig.VERSION_NAME}\nLatest build: ${info.tagName}"
-                primaryBtn.text = if (!info.apkDownloadUrl.isNullOrEmpty()) "↻ RE-DOWNLOAD ($sizeMb)" else "CLOSE"
+                titleView.text = "Up to date"
+                bodyView.text = "v${BuildConfig.VERSION_NAME} · Latest ${info.tagName}"
+                primaryBtn.text = if (!info.apkDownloadUrl.isNullOrEmpty()) "↻ RE-INSTALL ($sizeMb)" else "CLOSE"
                 primaryBtn.setOnClickListener {
                     val url = info.apkDownloadUrl
                     if (!url.isNullOrEmpty()) {
@@ -138,8 +138,8 @@ object AppUpdater {
         }
 
         dialog.show()
-        titleView.text = "Checking GitHub Releases…"
-        bodyView.text = "Installed: v${BuildConfig.VERSION_NAME}"
+        titleView.text = "Checking updates…"
+        bodyView.text = "v${BuildConfig.VERSION_NAME}"
         progressBar.isIndeterminate = true
         progressBar.visibility = View.VISIBLE
         primaryBtn.visibility = View.GONE

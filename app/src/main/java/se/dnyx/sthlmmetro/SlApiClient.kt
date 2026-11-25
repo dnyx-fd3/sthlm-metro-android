@@ -38,7 +38,8 @@ data class StationOption(
     val name: String,
     val subtitle: String = "",
     val lat: Double = Double.NaN,
-    val lon: Double = Double.NaN
+    val lon: Double = Double.NaN,
+    val modes: Set<String> = emptySet()
 )
 
 object SlApiClient {
@@ -52,21 +53,24 @@ object SlApiClient {
     )
 
     val POPULAR_STATIONS = listOf(
-        StationOption(9001, "T-Centralen", "Metro · Pendeltåg", 59.3310, 18.0593),
-        StationOption(9203, "Universitetet", "Metro 14 · Roslagsbanan · Bus 50", 59.3656, 18.0550),
-        StationOption(9117, "Odenplan", "Metro · Pendeltåg · Bus", 59.3428, 18.0499),
-        StationOption(9600, "Stockholms östra", "Roslagsbanan · KTH", 59.3457, 18.0715),
-        StationOption(9192, "Slussen", "Metro Red/Green · Bus", 59.3195, 18.0722),
-        StationOption(9189, "Gullmarsplan", "Metro Green · Tvärbanan", 59.2989, 18.0810),
-        StationOption(9220, "Ropsten", "Metro 13 · Lidingöbanan", 59.3574, 18.1024),
-        StationOption(9293, "Liljeholmen", "Metro Red · Tvärbanan", 59.3106, 18.0227),
-        StationOption(9112, "Alvik", "Metro Green · Tvärbanan", 59.3335, 17.9806),
-        StationOption(9305, "Västra skogen", "Metro Blue 10/11", 59.3474, 18.0038),
-        StationOption(9529, "Älvsjö", "Pendeltåg 40–48", 59.2784, 18.0108),
-        StationOption(9509, "Solna", "Pendeltåg · Tvärbanan", 59.3653, 18.0099),
-        StationOption(9109, "Brommaplan", "Metro Green · Bus", 59.3385, 17.9396),
-        StationOption(7006, "Flemingsberg", "Pendeltåg · Campus", 59.2185, 17.9467)
+        StationOption(9001, "T-Centralen", "Metro · Pendel · Tram", 59.3310, 18.0593, setOf("METRO", "TRAIN", "TRAM", "BUS")),
+        StationOption(9203, "Universitetet", "Metro 14 · Roslagsbanan · Bus", 59.3656, 18.0550, setOf("METRO", "TRAIN", "BUS")),
+        StationOption(9117, "Odenplan", "Metro · Pendel · Bus", 59.3428, 18.0499, setOf("METRO", "TRAIN", "BUS")),
+        StationOption(9600, "Stockholms östra", "Roslagsbanan · Metro", 59.3457, 18.0715, setOf("TRAIN", "METRO", "BUS")),
+        StationOption(9192, "Slussen", "Metro · Saltsjöbanan · Bus", 59.3195, 18.0722, setOf("METRO", "TRAIN", "BUS", "SHIP")),
+        StationOption(9189, "Gullmarsplan", "Metro · Tvärbanan · Bus", 59.2989, 18.0810, setOf("METRO", "TRAM", "BUS")),
+        StationOption(9220, "Ropsten", "Metro 13 · Lidingöbanan", 59.3574, 18.1024, setOf("METRO", "TRAM", "BUS")),
+        StationOption(9293, "Liljeholmen", "Metro · Tvärbanan · Bus", 59.3106, 18.0227, setOf("METRO", "TRAM", "BUS")),
+        StationOption(9112, "Alvik", "Metro · Tvärbanan · Nockeby", 59.3335, 17.9806, setOf("METRO", "TRAM", "BUS")),
+        StationOption(9305, "Västra skogen", "Metro Blue 10/11", 59.3474, 18.0038, setOf("METRO", "BUS")),
+        StationOption(9529, "Älvsjö", "Pendeltåg 40–48", 59.2784, 18.0108, setOf("TRAIN", "BUS")),
+        StationOption(9509, "Solna", "Pendeltåg · Tvärbanan", 59.3653, 18.0099, setOf("TRAIN", "TRAM", "BUS")),
+        StationOption(9109, "Brommaplan", "Metro Green · Bus", 59.3385, 17.9396, setOf("METRO", "BUS")),
+        StationOption(7006, "Flemingsberg", "Pendeltåg · Campus", 59.2185, 17.9467, setOf("TRAIN", "BUS"))
     )
+
+    private val POPULAR_MODES_BY_ID: Map<Int, Set<String>> =
+        POPULAR_STATIONS.associate { it.siteId to it.modes }
 
     private fun httpGet(urlStr: String, timeoutMs: Int = 12000): String {
         val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
@@ -166,7 +170,11 @@ object SlApiClient {
     }
 
     fun fetchAllSites(): List<StationOption> {
-        val raw = httpGet("$BASE_URL/sites", timeoutMs = 15000)
+        val raw = try {
+            httpGet("$BASE_URL/sites?expand=true", timeoutMs = 20000)
+        } catch (_: Exception) {
+            httpGet("$BASE_URL/sites", timeoutMs = 15000)
+        }
         val arr = JSONArray(raw)
         val out = ArrayList<StationOption>(arr.length())
         for (i in 0 until arr.length()) {
@@ -176,7 +184,23 @@ object SlApiClient {
             if (id > 0 && name.isNotEmpty()) {
                 val lat = obj.optDouble("lat", Double.NaN)
                 val lon = obj.optDouble("lon", Double.NaN)
-                out.add(StationOption(id, name, "SL #$id", lat, lon))
+                val modes = mutableSetOf<String>()
+                val stopAreas = obj.optJSONArray("stop_areas")
+                if (stopAreas != null) {
+                    for (j in 0 until stopAreas.length()) {
+                        val sa = stopAreas.optJSONObject(j) ?: continue
+                        val type = sa.optString("type", "").uppercase()
+                        when {
+                            type.contains("METRO") -> modes.add("METRO")
+                            type.contains("RAIL") || type.contains("TRAIN") -> modes.add("TRAIN")
+                            type.contains("TRAM") -> modes.add("TRAM")
+                            type.contains("SHIP") || type.contains("FERRY") -> modes.add("SHIP")
+                            type.contains("BUS") -> modes.add("BUS")
+                        }
+                    }
+                }
+                POPULAR_MODES_BY_ID[id]?.let { modes.addAll(it) }
+                out.add(StationOption(id, name, "SL #$id", lat, lon, modes))
             }
         }
         return out

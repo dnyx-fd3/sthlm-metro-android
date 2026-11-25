@@ -56,7 +56,7 @@ class SettingsActivity : AppCompatActivity() {
             val ok = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
             if (ok) {
-                Toast.makeText(this, "📍 Near me ready — updates silently on widget!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "📍 Near me ready", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -214,7 +214,7 @@ class SettingsActivity : AppCompatActivity() {
             AnalyticsHelper.logWidgetPinned(this, styleName)
             manager.requestPinAppWidget(provider, null, null)
         } else {
-            Toast.makeText(this, "Long-press Home Screen → Widgets → T-Radar to add.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Long-press Home → Widgets → T-Radar", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -353,21 +353,22 @@ class SettingsActivity : AppCompatActivity() {
         for (i in 0 until 3) {
             val s = slots[i]
             if (s != null) {
+                slotMetas[i].visibility = View.VISIBLE
                 if (s.isNearMe) {
-                    slotNames[i].text = "📍 Near me (Auto GPS)"
+                    slotNames[i].text = "📍 Near me"
                     slotNames[i].setTextColor(cyan)
-                    slotMetas[i].text = "${s.filter.label} · Live walk time"
+                    slotMetas[i].text = "${s.filter.label} · GPS"
                 } else {
                     slotNames[i].text = s.stationName
                     slotNames[i].setTextColor(primary)
-                    slotMetas[i].text = "${s.filter.label} · ${s.walkMinutes}m walk"
+                    slotMetas[i].text = "${s.filter.label} · ${s.walkMinutes}m"
                 }
                 slotActions[i]?.text = "EDIT"
             } else {
-                slotNames[i].text = "+ Add stop ${i + 1}"
+                slotNames[i].text = "+ Stop ${i + 1}"
                 slotNames[i].setTextColor(secondary)
-                slotMetas[i].text = "Optional"
-                slotActions[i]?.text = "ADD"
+                slotMetas[i].visibility = View.GONE
+                slotActions[i]?.text = "+"
             }
         }
     }
@@ -384,9 +385,9 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun renderVersionLabel() {
         versionLabel.text = if (AnalyticsHelper.isDevExcluded(this)) {
-            "T-Radar v${BuildConfig.VERSION_NAME} · 🧪 TESTER"
+            "v${BuildConfig.VERSION_NAME} · 🧪 TESTER"
         } else {
-            "T-Radar v${BuildConfig.VERSION_NAME}"
+            "v${BuildConfig.VERSION_NAME}"
         }
     }
 

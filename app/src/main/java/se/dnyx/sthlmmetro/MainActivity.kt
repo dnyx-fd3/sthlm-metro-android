@@ -30,11 +30,20 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
 
+    private data class BoardDeparture(
+        val item: DepartureItem,
+        val siteId: Int,
+        val stationName: String,
+        val walkMinutes: Int
+    )
+
     private val executor = Executors.newSingleThreadExecutor()
+    private val nearbyPool = Executors.newFixedThreadPool(4)
     private val uiHandler = Handler(Looper.getMainLooper())
     private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
@@ -43,13 +52,14 @@ class MainActivity : AppCompatActivity() {
     private var nearMeMode = false
     private var selectedPinnedIdx = 0
     private var nearbyStops: List<NearbyStop> = emptyList()
-    private var selectedNearbyIdx = 0
+    private var selectedNearbyIdx = -1
+    private var nearbyDeparturesBySite: Map<Int, List<DepartureItem>> = emptyMap()
 
     private var activeFilter: ModeFilter = ModeFilter.ALL
     private var dirFilter: Int = 0
 
-    private var rawDepartures: List<DepartureItem> = emptyList()
-    private var visibleDepartures: List<DepartureItem> = emptyList()
+    private var rawDepartures: List<BoardDeparture> = emptyList()
+    private var visibleDepartures: List<BoardDeparture> = emptyList()
     private var activeRemindersMap: Map<String, ActiveReminder> = emptyMap()
     private var lastSyncedMs: Long = 0L
 
@@ -77,7 +87,7 @@ class MainActivity : AppCompatActivity() {
             if (ok) {
                 loadNearMeStops()
             } else {
-                showState("Location denied. Allow GPS to use Near me.", showCat = false, actionLabel = "ALLOW LOCATION") {
+                showState("Location off", showCat = false, actionLabel = "ALLOW") {
                     requestLocationAndLoad()
                 }
             }
@@ -163,10 +173,13 @@ class MainActivity : AppCompatActivity() {
 
         pillNearMe.setOnClickListener {
             nearMeMode = true
+            selectedNearbyIdx = -1
             dirFilter = 0
             activeFilter = ModeFilter.ALL
             renderTopPills()
+            renderNearbyStrip()
             renderFilterChips()
+            renderDirButton()
             requestLocationAndLoad()
         }
 
@@ -180,6 +193,7 @@ class MainActivity : AppCompatActivity() {
                     activeFilter = if (slotFilter == ModeFilter.AUTO) ModeFilter.ALL else slotFilter
                     renderTopPills()
                     renderFilterChips()
+                    renderDirButton()
                     fetchActiveStopDepartures()
                 }
             }
@@ -200,19 +214,20 @@ class MainActivity : AppCompatActivity() {
         }
 
         listView.setOnItemClickListener { _, _, position, _ ->
-            val d = visibleDepartures.getOrNull(position) ?: return@setOnItemClickListener
-            val (stopName, walkMin, origSlotIdx) = currentStopInfo()
+            val row = visibleDepartures.getOrNull(position) ?: return@setOnItemClickListener
+            val d = row.item
+            val origSlotIdx = if (nearMeMode) -1 else currentStopInfo().third
             startActivity(
                 Intent(this, DepartureReminderActivity::class.java).apply {
-                    putExtra(DepartureReminderActivity.EXTRA_SITE_ID, currentSiteId())
+                    putExtra(DepartureReminderActivity.EXTRA_SITE_ID, row.siteId)
                     putExtra(DepartureReminderActivity.EXTRA_SLOT_INDEX, origSlotIdx)
-                    putExtra(DepartureReminderActivity.EXTRA_STATION_NAME, stopName)
+                    putExtra(DepartureReminderActivity.EXTRA_STATION_NAME, row.stationName)
                     putExtra(DepartureReminderActivity.EXTRA_DESIGNATION, d.designation)
                     putExtra(DepartureReminderActivity.EXTRA_DESTINATION, d.destination)
                     putExtra(DepartureReminderActivity.EXTRA_CLOCK_TIME, d.clockTime)
                     putExtra(DepartureReminderActivity.EXTRA_EXPECTED_EPOCH_MS, d.expectedEpochMs)
                     putExtra(DepartureReminderActivity.EXTRA_BADGE_STYLE, d.badgeStyle.name)
-                    putExtra(DepartureReminderActivity.EXTRA_WALK_MINUTES, walkMin)
+                    putExtra(DepartureReminderActivity.EXTRA_WALK_MINUTES, row.walkMinutes)
                 }
             )
         }
@@ -275,11 +290,18 @@ class MainActivity : AppCompatActivity() {
         uiHandler.removeCallbacks(tickRunnable)
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        executor.shutdownNow()
+        nearbyPool.shutdownNow()
+    }
+
     private fun reloadSharedSlotsAndFetch() {
         allSlots = WidgetPrefs.loadSharedSlots(this)
         pinnedSlots = allSlots.mapIndexedNotNull { idx, s -> if (s.isNearMe) null else idx to s }
         if (pinnedSlots.isEmpty()) {
             nearMeMode = true
+            selectedNearbyIdx = -1
             renderTopPills()
             renderFilterChips()
             renderDirButton()
@@ -297,7 +319,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun currentStopInfo(): Triple<String, Int, Int> {
         if (nearMeMode) {
-            val near = nearbyStops.getOrNull(selectedNearbyIdx)
+            val near = if (selectedNearbyIdx >= 0) {
+                nearbyStops.getOrNull(selectedNearbyIdx)
+            } else {
+                nearbyStops.firstOrNull { "METRO" in it.modes || "TRAIN" in it.modes } ?: nearbyStops.firstOrNull()
+            }
             if (near != null) return Triple(near.name, near.walkMinutes, -1)
         }
         val pair = pinnedSlots.getOrNull(selectedPinnedIdx)
@@ -309,7 +335,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun currentSiteId(): Int {
         if (nearMeMode) {
-            nearbyStops.getOrNull(selectedNearbyIdx)?.let { return it.siteId }
+            val near = if (selectedNearbyIdx >= 0) {
+                nearbyStops.getOrNull(selectedNearbyIdx)
+            } else {
+                nearbyStops.firstOrNull { "METRO" in it.modes || "TRAIN" in it.modes } ?: nearbyStops.firstOrNull()
+            }
+            near?.let { return it.siteId }
         }
         return pinnedSlots.getOrNull(selectedPinnedIdx)?.second?.siteId ?: WidgetPrefs.DEFAULT_SITE_ID
     }
@@ -366,13 +397,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun loadNearMeStops() {
         stationTitle.text = "Near me"
-        stationMeta.text = "Finding closest SL stop…"
-        showState("Locating you…", showCat = false)
+        stationMeta.text = "Locating…"
+        showState("Locating…", showCat = false)
 
         LocationHelper.getQuickLocation(this) { loc ->
             if (loc == null) {
                 runOnUiThread {
-                    showState("GPS unavailable. Enable Location Services.", showCat = false, actionLabel = "RETRY") {
+                    showState("GPS unavailable", showCat = false, actionLabel = "RETRY") {
                         loadNearMeStops()
                     }
                 }
@@ -386,18 +417,19 @@ class MainActivity : AppCompatActivity() {
                 } catch (_: Exception) {
                     SlApiClient.POPULAR_STATIONS
                 }
-                val nearest = LocationHelper.findNearestStops(loc.latitude, loc.longitude, sites, limit = 4)
+                val nearest = LocationHelper.findNearestDiverseStops(loc.latitude, loc.longitude, sites, limit = 4)
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     nearbyStops = nearest
-                    selectedNearbyIdx = 0
+                    selectedNearbyIdx = -1
+                    nearbyDeparturesBySite = emptyMap()
                     renderNearbyStrip()
                     val first = nearest.firstOrNull()
                     if (first != null) {
                         AnalyticsHelper.logNearMeUsed(this, "app", first.name, first.walkMinutes)
                         fetchActiveStopDepartures()
                     } else {
-                        showState("No SL stops found nearby.", showCat = false)
+                        showState("No stops nearby", showCat = false)
                     }
                 }
             }
@@ -405,18 +437,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun fetchActiveStopDepartures() {
+        if (nearMeMode && selectedNearbyIdx == -1 && nearbyStops.isNotEmpty()) {
+            fetchCombinedNearbyDepartures(nearbyStops)
+            return
+        }
+
         val siteId = currentSiteId()
         val (stopName, walkMin, _) = currentStopInfo()
         stationTitle.text = stopName
-        stationMeta.text = if (nearMeMode) {
-            val dist = nearbyStops.getOrNull(selectedNearbyIdx)?.distanceMeters ?: 0
-            "📍 ${dist}m · ${walkMin} min walk · Updating…"
-        } else {
-            "Walk ${walkMin}m · Updating…"
-        }
+        stationMeta.text = "${walkMin}m walk · Updating…"
 
         if (rawDepartures.isEmpty()) {
-            showState("Fetching live SL…", showCat = false)
+            showState("Loading…", showCat = false)
         }
 
         executor.execute {
@@ -424,20 +456,24 @@ class MainActivity : AppCompatActivity() {
                 val list = SlApiClient.fetchDepartures(siteId, ModeFilter.ALL, limit = 24)
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
+                    if (nearMeMode && selectedNearbyIdx == -1) return@runOnUiThread
                     if (currentSiteId() != siteId) return@runOnUiThread
-                    rawDepartures = list
+                    if (nearMeMode) {
+                        nearbyDeparturesBySite = nearbyDeparturesBySite + (siteId to list)
+                    }
+                    rawDepartures = list.map { BoardDeparture(it, siteId, stopName, walkMin) }
                     lastSyncedMs = System.currentTimeMillis()
                     updateHeaderMeta()
                     applyFiltersAndRenderList()
                 }
             } catch (_: SlRateLimitException) {
                 runOnUiThread {
-                    if (!isFinishing) showState("SL rate limit (429). Wait a moment & tap ↻.", showCat = false)
+                    if (!isFinishing) showState("Rate limited · Tap ↻", showCat = false)
                 }
             } catch (_: Exception) {
                 runOnUiThread {
                     if (!isFinishing) {
-                        showState("Couldn't reach SL right now.", showCat = false, actionLabel = "RETRY") {
+                        showState("Offline", showCat = false, actionLabel = "RETRY") {
                             fetchActiveStopDepartures()
                         }
                     }
@@ -446,46 +482,123 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun fetchCombinedNearbyDepartures(stops: List<NearbyStop>) {
+        stationTitle.text = "Near me"
+        stationMeta.text = "${stops.size} stops · Updating…"
+        if (rawDepartures.isEmpty()) {
+            showState("Loading…", showCat = false)
+        }
+
+        executor.execute {
+            val futures = stops.map { stop ->
+                stop to nearbyPool.submit(Callable {
+                    try {
+                        Result.success(SlApiClient.fetchDepartures(stop.siteId, ModeFilter.ALL, limit = 12))
+                    } catch (e: Exception) {
+                        Result.failure(e)
+                    }
+                })
+            }
+
+            val perSite = linkedMapOf<Int, List<DepartureItem>>()
+            var rateLimited = false
+            var succeeded = 0
+            for ((stop, future) in futures) {
+                try {
+                    val res = future.get()
+                    res.onSuccess { items ->
+                        succeeded++
+                        perSite[stop.siteId] = items
+                    }.onFailure { err ->
+                        if (err is SlRateLimitException) rateLimited = true
+                    }
+                } catch (_: Exception) {
+                    // Ignore individual stop failure if others succeed
+                }
+            }
+
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (!nearMeMode || selectedNearbyIdx != -1) return@runOnUiThread
+
+                if (succeeded == 0) {
+                    if (rateLimited) {
+                        showState("Rate limited · Tap ↻", showCat = false)
+                    } else {
+                        showState("Offline", showCat = false, actionLabel = "RETRY") {
+                            fetchActiveStopDepartures()
+                        }
+                    }
+                    return@runOnUiThread
+                }
+
+                nearbyDeparturesBySite = perSite
+                rawDepartures = buildCombinedNearbyList(stops, perSite)
+                lastSyncedMs = System.currentTimeMillis()
+                updateHeaderMeta()
+                applyFiltersAndRenderList()
+            }
+        }
+    }
+
+    private fun buildCombinedNearbyList(
+        stops: List<NearbyStop>,
+        perSite: Map<Int, List<DepartureItem>>
+    ): List<BoardDeparture> {
+        return stops.flatMap { stop ->
+            perSite[stop.siteId].orEmpty().take(8).map { item ->
+                BoardDeparture(item, stop.siteId, stop.name, stop.walkMinutes)
+            }
+        }.sortedBy {
+            if (it.item.expectedEpochMs > 0L) it.item.expectedEpochMs else Long.MAX_VALUE
+        }
+    }
+
     private fun updateHeaderMeta() {
-        val (_, walkMin, _) = currentStopInfo()
         val clock = if (lastSyncedMs > 0L) {
             Instant.ofEpochMilli(lastSyncedMs).atZone(ZoneId.systemDefault()).toLocalTime().format(timeFmt)
         } else {
             ""
         }
-        stationMeta.text = if (nearMeMode) {
-            val dist = nearbyStops.getOrNull(selectedNearbyIdx)?.distanceMeters ?: 0
-            "📍 ${dist}m · ${walkMin} min walk" + if (clock.isNotEmpty()) " · $clock" else ""
-        } else {
-            "Walk ${walkMin}m" + if (clock.isNotEmpty()) " · Synced $clock" else ""
+        if (nearMeMode && selectedNearbyIdx == -1) {
+            stationTitle.text = "Near me"
+            stationMeta.text = "${nearbyStops.size} stops" + if (clock.isNotEmpty()) " · $clock" else ""
+            return
         }
+        val (stopName, walkMin, _) = currentStopInfo()
+        stationTitle.text = stopName
+        stationMeta.text = "${walkMin}m walk" + if (clock.isNotEmpty()) " · $clock" else ""
     }
 
     private fun applyFiltersAndRenderList() {
         val nowMs = System.currentTimeMillis()
-        val live = rawDepartures.filter { it.expectedEpochMs <= 0L || it.expectedEpochMs > nowMs - 10_000L }
+        val live = rawDepartures.filter {
+            it.item.expectedEpochMs <= 0L || it.item.expectedEpochMs > nowMs - 10_000L
+        }
 
         val byMode = when (activeFilter) {
-            ModeFilter.METRO -> live.filter { it.transportMode == "METRO" }
-            ModeFilter.BUS -> live.filter { it.transportMode == "BUS" }
-            ModeFilter.PENDEL -> live.filter { it.transportMode == "TRAIN" && it.badgeStyle == LineBadgeStyle.PENDEL }
+            ModeFilter.METRO -> live.filter { it.item.transportMode == "METRO" }
+            ModeFilter.BUS -> live.filter { it.item.transportMode == "BUS" }
+            ModeFilter.PENDEL -> live.filter {
+                it.item.transportMode == "TRAIN" && it.item.badgeStyle == LineBadgeStyle.PENDEL
+            }
             else -> live
         }
 
         visibleDepartures = if (dirFilter == 0) {
             byMode
         } else {
-            byMode.filter { it.directionCode == dirFilter }
+            byMode.filter { it.item.directionCode == dirFilter }
         }
 
         if (visibleDepartures.isEmpty()) {
             if (lastSyncedMs > 0L) {
                 if (live.isEmpty()) {
-                    showState("All buses left without you... poke ↻", showCat = true, actionLabel = "REFRESH ↻") {
+                    showState("All departed · ↻", showCat = true, actionLabel = "REFRESH") {
                         fetchActiveStopDepartures()
                     }
                 } else {
-                    showState("No departures match this filter.", showCat = false)
+                    showState("No matches", showCat = false)
                 }
             }
             adapter.notifyDataSetChanged()
@@ -529,12 +642,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
         pillAddStop.visibility = if (allSlots.size < 3) View.VISIBLE else View.GONE
-        nearbyStripScroll.visibility = if (nearMeMode && nearbyStops.size > 1) View.VISIBLE else View.GONE
+        nearbyStripScroll.visibility = if (nearMeMode && nearbyStops.isNotEmpty()) View.VISIBLE else View.GONE
     }
 
     private fun renderNearbyStrip() {
         nearbyStripContainer.removeAllViews()
-        if (!nearMeMode || nearbyStops.size <= 1) {
+        if (!nearMeMode || nearbyStops.isEmpty()) {
             nearbyStripScroll.visibility = View.GONE
             return
         }
@@ -543,26 +656,54 @@ class MainActivity : AppCompatActivity() {
         val dark = ContextCompat.getColor(this, R.color.bg_dark)
         val secondary = ContextCompat.getColor(this, R.color.text_secondary)
 
-        nearbyStops.forEachIndexed { idx, stop ->
+        fun addNearbyChip(label: String, sel: Boolean, onClick: () -> Unit) {
             val chip = TextView(this).apply {
-                text = "${MetroWidgetProvider.shortenTabLabel(stop.name)} · ${stop.walkMinutes}m"
+                text = label
                 textSize = 11f
                 setPadding((10 * density).toInt(), (5 * density).toInt(), (10 * density).toInt(), (5 * density).toInt())
-                val sel = idx == selectedNearbyIdx
                 setBackgroundResource(if (sel) R.drawable.chip_active else R.drawable.chip_idle)
                 setTextColor(if (sel) dark else secondary)
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply { marginEnd = (6 * density).toInt() }
-                setOnClickListener {
-                    selectedNearbyIdx = idx
-                    dirFilter = 0
-                    renderNearbyStrip()
+                setOnClickListener { onClick() }
+            }
+            nearbyStripContainer.addView(chip)
+        }
+
+        if (nearbyStops.size > 1) {
+            addNearbyChip("All", selectedNearbyIdx == -1) {
+                selectedNearbyIdx = -1
+                dirFilter = 0
+                renderNearbyStrip()
+                renderDirButton()
+                if (nearbyDeparturesBySite.isNotEmpty()) {
+                    rawDepartures = buildCombinedNearbyList(nearbyStops, nearbyDeparturesBySite)
+                    updateHeaderMeta()
+                    applyFiltersAndRenderList()
+                } else {
                     fetchActiveStopDepartures()
                 }
             }
-            nearbyStripContainer.addView(chip)
+        }
+
+        nearbyStops.forEachIndexed { idx, stop ->
+            val label = "${stop.modeIcon()} ${MetroWidgetProvider.shortenTabLabel(stop.name)} · ${stop.walkMinutes}m"
+            addNearbyChip(label, idx == selectedNearbyIdx) {
+                selectedNearbyIdx = idx
+                dirFilter = 0
+                renderNearbyStrip()
+                renderDirButton()
+                val cached = nearbyDeparturesBySite[stop.siteId]
+                if (cached != null) {
+                    rawDepartures = cached.map { BoardDeparture(it, stop.siteId, stop.name, stop.walkMinutes) }
+                    updateHeaderMeta()
+                    applyFiltersAndRenderList()
+                } else {
+                    fetchActiveStopDepartures()
+                }
+            }
         }
     }
 
@@ -578,9 +719,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderDirButton() {
         dirToggleBtn.text = when (dirFilter) {
-            1 -> "↑ Dir 1"
-            2 -> "↓ Dir 2"
-            else -> "⇅ All"
+            1 -> "↑ 1"
+            2 -> "↓ 2"
+            else -> "⇅"
         }
         val active = dirFilter != 0
         dirToggleBtn.setTextColor(
@@ -590,18 +731,18 @@ class MainActivity : AppCompatActivity() {
 
     private inner class DepartureAdapter : BaseAdapter() {
         override fun getCount(): Int = visibleDepartures.size
-        override fun getItem(position: Int): DepartureItem = visibleDepartures[position]
+        override fun getItem(position: Int): BoardDeparture = visibleDepartures[position]
         override fun getItemId(position: Int): Long = position.toLong()
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val v = convertView ?: LayoutInflater.from(this@MainActivity)
                 .inflate(R.layout.item_departure, parent, false)
-            val d = visibleDepartures[position]
+            val row = visibleDepartures[position]
+            val d = row.item
             val nowMs = System.currentTimeMillis()
             val remainingSec = if (d.expectedEpochMs > 0L) ((d.expectedEpochMs - nowMs) / 1000L).toInt() else -1
 
-            val siteId = currentSiteId()
-            val remKey = ReminderManager.buildKey(siteId, d.designation, d.destination, d.expectedEpochMs)
+            val remKey = ReminderManager.buildKey(row.siteId, d.designation, d.destination, d.expectedEpochMs)
             val activeRem = activeRemindersMap[remKey]
 
             val badge = v.findViewById<TextView>(R.id.dep_badge)
@@ -617,9 +758,12 @@ class MainActivity : AppCompatActivity() {
             val sub = v.findViewById<TextView>(R.id.dep_sub)
             val parts = mutableListOf<String>()
             if (activeRem != null) parts.add("🔔 ${ReminderManager.formatClock(activeRem.triggerAtMs)}")
+            if (nearMeMode && selectedNearbyIdx == -1) {
+                parts.add("${MetroWidgetProvider.shortenTabLabel(row.stationName)} · ${row.walkMinutes}m")
+            }
             if (d.stopPoint.isNotEmpty()) parts.add("Bay ${d.stopPoint}")
             if (d.cancelled) parts.add("Cancelled")
-            else if (d.delayMinutes > 0) parts.add("+${d.delayMinutes}m late")
+            else if (d.delayMinutes > 0) parts.add("+${d.delayMinutes}m")
 
             if (parts.isNotEmpty()) {
                 sub.visibility = View.VISIBLE

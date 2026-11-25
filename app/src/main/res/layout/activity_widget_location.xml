@@ -31,7 +31,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Finding closest SL stop…"
+            android:text="Locating…"
             android:textColor="@color/text_primary"
             android:textSize="17sp"
             android:textStyle="bold" />
@@ -41,7 +41,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="Allow location access to show departures &amp; walk time for your nearest stop."
+            android:text="Used once for silent widget Near me."
             android:textColor="@color/text_secondary"
             android:textSize="12sp" />
 
@@ -63,7 +63,7 @@
             android:background="@drawable/btn_primary_bg"
             android:fontFamily="monospace"
             android:gravity="center"
-            android:text="ALLOW LOCATION"
+            android:text="ALLOW"
             android:textColor="@color/bg_dark"
             android:textSize="12sp"
             android:textStyle="bold" />

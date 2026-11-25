@@ -50,8 +50,8 @@ class WidgetLocationActivity : AppCompatActivity() {
         if (LocationHelper.hasLocationPermission(this)) {
             locateAndApply()
         } else {
-            titleView.text = "Allow location for Near me?"
-            bodyView.text = "After this one-time permission, tapping 📍 Near me updates right inside your widget without opening the app."
+            titleView.text = "Allow location"
+            bodyView.text = "Used once for silent widget Near me."
             spinner.visibility = View.GONE
             primaryBtn.visibility = View.VISIBLE
             primaryBtn.setOnClickListener {
@@ -66,8 +66,8 @@ class WidgetLocationActivity : AppCompatActivity() {
     }
 
     private fun locateAndApply() {
-        titleView.text = "Finding closest SL stop…"
-        bodyView.text = "Matching GPS to Stockholm stops."
+        titleView.text = "Locating…"
+        bodyView.text = "Finding nearby stops"
         spinner.visibility = View.VISIBLE
         primaryBtn.visibility = View.GONE
 
@@ -77,9 +77,9 @@ class WidgetLocationActivity : AppCompatActivity() {
                     if (isFinishing) return@runOnUiThread
                     spinner.visibility = View.GONE
                     titleView.text = "GPS unavailable"
-                    bodyView.text = "Turn on Location Services and try again."
+                    bodyView.text = "Enable Location and retry."
                     primaryBtn.visibility = View.VISIBLE
-                    primaryBtn.text = "TRY AGAIN"
+                    primaryBtn.text = "RETRY"
                     primaryBtn.setOnClickListener { locateAndApply() }
                 }
                 return@getQuickLocation
