@@ -11,6 +11,9 @@ import android.os.SystemClock
 import android.view.View
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
+import java.io.IOException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -32,7 +35,8 @@ class MetroWidgetProvider : AppWidgetProvider() {
                     if (cacheMatches) {
                         renderFromCache(context, appWidgetManager, widgetId, cfg, cached!!, logEmptyCat = false)
                     } else {
-                        refreshWidgetBlocking(context, appWidgetManager, widgetId, trigger = "system")
+                        // Do NOT enqueue one-time WorkManager from onUpdate (avoids ACTION_PACKAGE_CHANGED loop)
+                        refreshWidgetBlocking(context, appWidgetManager, widgetId, trigger = "system", isFinalAttempt = true)
                     }
                 }
             } finally {
@@ -83,7 +87,6 @@ class MetroWidgetProvider : AppWidgetProvider() {
         }
 
         val nowMs = System.currentTimeMillis()
-        val idsToFetch = mutableListOf<Int>()
         val triggerLabel = when (action) {
             ACTION_CAT_POKE -> "cat"
             ACTION_SELECT_SLOT -> "tab"
@@ -109,7 +112,6 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 continue
             }
 
-            idsToFetch.add(id)
             if (action == ACTION_REFRESH && cacheMatches) {
                 val partial = RemoteViews(context.packageName, R.layout.widget_departures)
                 partial.setTextViewText(R.id.widget_updated_at, "Refreshing live SL…")
@@ -122,19 +124,10 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 )
                 appWidgetManager.updateAppWidget(id, loadingViews)
             }
-        }
 
-        if (idsToFetch.isEmpty()) return
-
-        val pendingResult = goAsync()
-        executor.execute {
-            try {
-                for (id in idsToFetch) {
-                    refreshWidgetBlocking(context, appWidgetManager, id, trigger = triggerLabel)
-                }
-            } finally {
-                pendingResult.finish()
-            }
+            // Route network fetch via expedited WorkManager (JobScheduler) so Android 15/16
+            // always grants network access even after 10+ hours in the background!
+            WidgetRefreshWorker.enqueue(context, id, triggerLabel)
         }
     }
 
@@ -143,6 +136,11 @@ class MetroWidgetProvider : AppWidgetProvider() {
             cancelLocalRollover(context, id)
             WidgetPrefs.delete(context, id)
         }
+    }
+
+    enum class RefreshOutcome {
+        DONE,
+        RETRYABLE_NETWORK
     }
 
     companion object {
@@ -167,24 +165,29 @@ class MetroWidgetProvider : AppWidgetProvider() {
         private val CLOCK_IDS = intArrayOf(R.id.row_0_clock, R.id.row_1_clock, R.id.row_2_clock, R.id.row_3_clock)
 
         fun triggerAsyncRefresh(context: Context, appWidgetId: Int, trigger: String = "config_save") {
-            val appWidgetManager = AppWidgetManager.getInstance(context)
-            executor.execute {
-                refreshWidgetBlocking(context, appWidgetManager, appWidgetId, trigger = trigger)
-            }
+            // Also show immediate loading state and enqueue via WorkManager
+            WidgetRefreshWorker.enqueue(context, appWidgetId, trigger)
         }
 
         fun refreshWidgetBlocking(
             context: Context,
             appWidgetManager: AppWidgetManager,
             appWidgetId: Int,
-            trigger: String = "button"
-        ) {
+            trigger: String = "button",
+            isFinalAttempt: Boolean = true
+        ): RefreshOutcome {
             val cfg = WidgetPrefs.load(context, appWidgetId)
             val active = cfg.activeSlot
             AnalyticsHelper.logWidgetRefreshed(context, active, cfg.activeSlotIndex, trigger)
 
             try {
-                val fetched = SlApiClient.fetchDepartures(active.siteId, active.filter, limit = 20)
+                val fetched = try {
+                    SlApiClient.fetchDepartures(active.siteId, active.filter, limit = 20)
+                } catch (firstErr: IOException) {
+                    // Quick 1.2s retry inside the JobScheduler window for DNS/wake-from-sleep hiccups
+                    Thread.sleep(1200L)
+                    SlApiClient.fetchDepartures(active.siteId, active.filter, limit = 20)
+                }
                 val fetchedAtMs = System.currentTimeMillis()
                 WidgetPrefs.saveCache(
                     context = context,
@@ -197,31 +200,107 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 )
                 val cache = CachedSlotDepartures(active.siteId, active.filter.code, fetchedAtMs, fetched)
                 renderFromCache(context, appWidgetManager, appWidgetId, cfg, cache, logEmptyCat = true)
+                return RefreshOutcome.DONE
             } catch (_: SlRateLimitException) {
                 AnalyticsHelper.logSlError(context, active, "429_rate_limit")
-                val views = buildBaseViews(context, appWidgetId, cfg)
-                views.setTextViewText(R.id.widget_updated_at, "SL 429 limit · Wait & tap ↻")
-                views.setViewVisibility(R.id.widget_cat_empty, View.GONE)
-                views.setViewVisibility(R.id.widget_status_text, View.VISIBLE)
-                views.setTextViewText(R.id.widget_status_text, "SL rate limit hit (429). Wait a moment and tap ↻.")
-                for (i in 0 until 4) {
-                    views.setViewVisibility(ROW_IDS[i], View.GONE)
+                renderFailure(
+                    context = context,
+                    appWidgetManager = appWidgetManager,
+                    appWidgetId = appWidgetId,
+                    cfg = cfg,
+                    headerNote = "SL 429 limit · Wait & tap ↻",
+                    bodyNote = "SL rate limit hit (429). Wait a moment and tap ↻."
+                )
+                return RefreshOutcome.DONE
+            } catch (e: SlHttpException) {
+                AnalyticsHelper.logSlError(context, active, "http_${e.statusCode}")
+                renderFailure(
+                    context = context,
+                    appWidgetManager = appWidgetManager,
+                    appWidgetId = appWidgetId,
+                    cfg = cfg,
+                    headerNote = "SL HTTP ${e.statusCode} · Tap ↻ to retry",
+                    bodyNote = "SL returned HTTP ${e.statusCode}. Tap ↻ to retry."
+                )
+                return RefreshOutcome.DONE
+            } catch (e: IOException) {
+                if (!isFinalAttempt) {
+                    // Let WorkManager retry once OS network constraint stabilizes
+                    return RefreshOutcome.RETRYABLE_NETWORK
                 }
-                cancelLocalRollover(context, appWidgetId)
-                appWidgetManager.updateAppWidget(appWidgetId, views)
+                val tag = when (e) {
+                    is UnknownHostException -> "dns"
+                    is SocketTimeoutException -> "timeout"
+                    else -> "io"
+                }
+                AnalyticsHelper.logSlError(context, active, "network_$tag")
+                val reason = when (e) {
+                    is UnknownHostException -> "No DNS/network"
+                    is SocketTimeoutException -> "SL timed out"
+                    else -> "Offline"
+                }
+                renderFailure(
+                    context = context,
+                    appWidgetManager = appWidgetManager,
+                    appWidgetId = appWidgetId,
+                    cfg = cfg,
+                    headerNote = "$reason · Tap ↻ to retry",
+                    bodyNote = "Couldn't reach SL ($reason). Tap ↻ to retry."
+                )
+                return RefreshOutcome.DONE
             } catch (_: Exception) {
-                AnalyticsHelper.logSlError(context, active, "network")
-                val views = buildBaseViews(context, appWidgetId, cfg)
-                views.setTextViewText(R.id.widget_updated_at, "Offline · Tap ↻ to retry")
-                views.setViewVisibility(R.id.widget_cat_empty, View.GONE)
-                views.setViewVisibility(R.id.widget_status_text, View.VISIBLE)
-                views.setTextViewText(R.id.widget_status_text, "Couldn't reach SL right now. Tap ↻ to retry.")
-                for (i in 0 until 4) {
-                    views.setViewVisibility(ROW_IDS[i], View.GONE)
-                }
-                cancelLocalRollover(context, appWidgetId)
-                appWidgetManager.updateAppWidget(appWidgetId, views)
+                AnalyticsHelper.logSlError(context, active, "unknown")
+                renderFailure(
+                    context = context,
+                    appWidgetManager = appWidgetManager,
+                    appWidgetId = appWidgetId,
+                    cfg = cfg,
+                    headerNote = "Offline · Tap ↻ to retry",
+                    bodyNote = "Couldn't reach SL right now. Tap ↻ to retry."
+                )
+                return RefreshOutcome.DONE
             }
+        }
+
+        private fun renderFailure(
+            context: Context,
+            appWidgetManager: AppWidgetManager,
+            appWidgetId: Int,
+            cfg: WidgetConfig,
+            headerNote: String,
+            bodyNote: String
+        ) {
+            // If we still have non-expired cached departures for this exact stop, keep showing them!
+            val cached = WidgetPrefs.loadCache(context, appWidgetId, cfg.activeSlotIndex)
+            val nowMs = System.currentTimeMillis()
+            val hasLiveCache = cached != null &&
+                cached.siteId == cfg.activeSlot.siteId &&
+                cached.filterCode == cfg.activeSlot.filter.code &&
+                cached.items.any { it.expectedEpochMs <= 0L || it.expectedEpochMs > nowMs - 10_000L }
+
+            if (hasLiveCache) {
+                renderFromCache(
+                    context = context,
+                    appWidgetManager = appWidgetManager,
+                    appWidgetId = appWidgetId,
+                    cfg = cfg,
+                    cache = cached!!,
+                    logEmptyCat = false,
+                    overrideSubtitle = headerNote
+                )
+                return
+            }
+
+            val views = buildBaseViews(context, appWidgetId, cfg)
+            views.setTextViewText(R.id.widget_updated_at, headerNote)
+            views.setViewVisibility(R.id.widget_cat_empty, View.GONE)
+            views.setViewVisibility(R.id.widget_status_text, View.VISIBLE)
+            views.setTextViewText(R.id.widget_status_text, bodyNote)
+            for (i in 0 until 4) {
+                views.setViewVisibility(ROW_IDS[i], View.GONE)
+            }
+            cancelLocalRollover(context, appWidgetId)
+            appWidgetManager.updateAppWidget(appWidgetId, views)
         }
 
         private fun renderFromCache(
@@ -230,7 +309,8 @@ class MetroWidgetProvider : AppWidgetProvider() {
             appWidgetId: Int,
             cfg: WidgetConfig,
             cache: CachedSlotDepartures,
-            logEmptyCat: Boolean
+            logEmptyCat: Boolean,
+            overrideSubtitle: String? = null
         ) {
             val active = cfg.activeSlot
             val views = buildBaseViews(context, appWidgetId, cfg)
@@ -257,7 +337,7 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 if (logEmptyCat) {
                     AnalyticsHelper.logWidgetCatShown(context, active)
                 }
-                views.setTextViewText(R.id.widget_updated_at, "Last sync $syncClock$modeTag")
+                views.setTextViewText(R.id.widget_updated_at, overrideSubtitle ?: "Last sync $syncClock$modeTag")
                 views.setViewVisibility(R.id.widget_status_text, View.GONE)
                 views.setViewVisibility(R.id.widget_cat_empty, View.VISIBLE)
                 views.setTextViewText(R.id.widget_cat_caption, "All buses left without you... poke ↻")
@@ -269,7 +349,10 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 return
             }
 
-            views.setTextViewText(R.id.widget_updated_at, "Synced $syncClock$modeTag · Tap row to remind")
+            views.setTextViewText(
+                R.id.widget_updated_at,
+                overrideSubtitle ?: "Synced $syncClock$modeTag · Tap row to remind"
+            )
             views.setViewVisibility(R.id.widget_status_text, View.GONE)
             views.setViewVisibility(R.id.widget_cat_empty, View.GONE)
 
@@ -435,6 +518,7 @@ class MetroWidgetProvider : AppWidgetProvider() {
                             action = ACTION_SELECT_SLOT
                             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
                             putExtra(EXTRA_SLOT_INDEX, i)
+                            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                         }
                         val tabPi = PendingIntent.getBroadcast(
                             context,
@@ -451,10 +535,11 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 views.setViewVisibility(R.id.widget_tabs_bar, View.GONE)
             }
 
-            // Tap ↻ -> refresh
+            // Tap ↻ -> foreground broadcast -> WorkManager/JobScheduler fetch
             val refreshIntent = Intent(context, MetroWidgetProvider::class.java).apply {
                 action = ACTION_REFRESH
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             }
             val refreshPi = PendingIntent.getBroadcast(
                 context,
@@ -464,10 +549,11 @@ class MetroWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_refresh_btn, refreshPi)
 
-            // Tap roaming cat -> cat poke + refresh
+            // Tap roaming cat -> cat poke + WorkManager/JobScheduler fetch
             val catIntent = Intent(context, MetroWidgetProvider::class.java).apply {
                 action = ACTION_CAT_POKE
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             }
             val catPi = PendingIntent.getBroadcast(
                 context,

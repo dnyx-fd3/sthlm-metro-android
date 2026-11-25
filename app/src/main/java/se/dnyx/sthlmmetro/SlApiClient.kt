@@ -12,6 +12,7 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 
 class SlRateLimitException : Exception("SL HTTP 429 rate limit")
+class SlHttpException(val statusCode: Int) : Exception("SL HTTP $statusCode")
 
 enum class LineBadgeStyle {
     RED, GREEN, BLUE, PENDEL, ROSLAG, TRAM, BUS_BLUE, BUS_RED, CYAN
@@ -62,12 +63,14 @@ object SlApiClient {
         StationOption(7006, "Flemingsberg", "Pendeltåg · Campus")
     )
 
-    private fun httpGet(urlStr: String, timeoutMs: Int = 9000): String {
+    private fun httpGet(urlStr: String, timeoutMs: Int = 12000): String {
         val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = timeoutMs
             readTimeout = timeoutMs
+            useCaches = false
             setRequestProperty("Accept", "application/json")
+            setRequestProperty("Connection", "close")
             setRequestProperty("User-Agent", "TRadarAndroid/${BuildConfig.VERSION_NAME}")
         }
         try {
@@ -76,7 +79,7 @@ object SlApiClient {
                 throw SlRateLimitException()
             }
             if (code !in 200..299) {
-                throw IllegalStateException("HTTP $code")
+                throw SlHttpException(code)
             }
             BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { reader ->
                 val sb = StringBuilder()
@@ -160,7 +163,7 @@ object SlApiClient {
     }
 
     fun fetchAllSites(): List<StationOption> {
-        val raw = httpGet("$BASE_URL/sites", timeoutMs = 14000)
+        val raw = httpGet("$BASE_URL/sites", timeoutMs = 15000)
         val arr = JSONArray(raw)
         val out = ArrayList<StationOption>(arr.length())
         for (i in 0 until arr.length()) {
