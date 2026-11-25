@@ -20,7 +20,7 @@
         android:orientation="vertical"
         android:padding="10dp">
 
-        <!-- Minimal Header: Stop title (opens T-Radar) | 📍 | ↻ -->
+        <!-- Ultra-clean Header: Stop title (opens T-Radar) | ↻ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -33,7 +33,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:orientation="vertical"
-                android:paddingEnd="6dp">
+                android:paddingEnd="8dp">
 
                 <TextView
                     android:id="@+id/widget_station_name"
@@ -58,19 +58,9 @@
             </LinearLayout>
 
             <TextView
-                android:id="@+id/widget_near_btn"
-                android:layout_width="29dp"
-                android:layout_height="29dp"
-                android:layout_marginEnd="5dp"
-                android:background="@drawable/widget_btn_auto"
-                android:gravity="center"
-                android:text="📍"
-                android:textSize="12sp" />
-
-            <TextView
                 android:id="@+id/widget_refresh_btn"
-                android:layout_width="29dp"
-                android:layout_height="29dp"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:background="@drawable/widget_btn_auto"
                 android:gravity="center"
                 android:text="↻"
@@ -79,7 +69,7 @@
                 android:textStyle="bold" />
         </LinearLayout>
 
-        <!-- 2–3 Stop Quick Switcher Tabs -->
+        <!-- 2–3 Stop Quick Switcher Tabs (any slot can be 📍 Near me or a chosen station!) -->
         <LinearLayout
             android:id="@+id/widget_tabs_bar"
             android:layout_width="match_parent"
@@ -91,7 +81,7 @@
             <TextView
                 android:id="@+id/widget_tab_0"
                 android:layout_width="0dp"
-                android:layout_height="24dp"
+                android:layout_height="25dp"
                 android:layout_marginEnd="4dp"
                 android:layout_weight="1"
                 android:background="@drawable/widget_tab_active_auto"
@@ -109,7 +99,7 @@
             <TextView
                 android:id="@+id/widget_tab_1"
                 android:layout_width="0dp"
-                android:layout_height="24dp"
+                android:layout_height="25dp"
                 android:layout_marginEnd="4dp"
                 android:layout_weight="1"
                 android:background="@drawable/widget_tab_idle_auto"
@@ -127,7 +117,7 @@
             <TextView
                 android:id="@+id/widget_tab_2"
                 android:layout_width="0dp"
-                android:layout_height="24dp"
+                android:layout_height="25dp"
                 android:layout_weight="1"
                 android:background="@drawable/widget_tab_idle_auto"
                 android:ellipsize="end"
@@ -154,7 +144,7 @@
             android:textSize="11sp"
             android:visibility="visible" />
 
-        <!-- Neon Cyber-Cat Empty State (single punchy line) -->
+        <!-- Neon Cyber-Cat Empty State -->
         <FrameLayout
             android:id="@+id/widget_cat_empty"
             android:layout_width="match_parent"
@@ -307,8 +297,8 @@
                         android:ellipsize="end"
                         android:fontFamily="monospace"
                         android:maxLines="1"
-                        android:textColor="@color/widget_warn"
-                        android:textSize="9sp"
+                        android:textColor="@color/widget_accent"
+                        android:textSize="10sp"
                         android:visibility="gone" />
                 </LinearLayout>
 
@@ -408,8 +398,8 @@
                         android:ellipsize="end"
                         android:fontFamily="monospace"
                         android:maxLines="1"
-                        android:textColor="@color/widget_warn"
-                        android:textSize="9sp"
+                        android:textColor="@color/widget_accent"
+                        android:textSize="10sp"
                         android:visibility="gone" />
                 </LinearLayout>
 
@@ -509,8 +499,8 @@
                         android:ellipsize="end"
                         android:fontFamily="monospace"
                         android:maxLines="1"
-                        android:textColor="@color/widget_warn"
-                        android:textSize="9sp"
+                        android:textColor="@color/widget_accent"
+                        android:textSize="10sp"
                         android:visibility="gone" />
                 </LinearLayout>
 
@@ -610,8 +600,8 @@
                         android:ellipsize="end"
                         android:fontFamily="monospace"
                         android:maxLines="1"
-                        android:textColor="@color/widget_warn"
-                        android:textSize="9sp"
+                        android:textColor="@color/widget_accent"
+                        android:textSize="10sp"
                         android:visibility="gone" />
                 </LinearLayout>
 

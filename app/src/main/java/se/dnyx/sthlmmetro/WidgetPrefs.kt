@@ -33,7 +33,10 @@ data class StationSlot(
     val stationName: String,
     val filter: ModeFilter = ModeFilter.AUTO,
     val walkMinutes: Int = 3
-)
+) {
+    val isNearMe: Boolean
+        get() = siteId == WidgetPrefs.NEAR_ME_SITE_ID
+}
 
 data class NearbyOverride(
     val siteId: Int,
@@ -43,27 +46,47 @@ data class NearbyOverride(
     val updatedAtMs: Long
 )
 
+data class ActiveReminder(
+    val key: String,
+    val requestCode: Int,
+    val stationName: String,
+    val designation: String,
+    val destination: String,
+    val walkMinutes: Int,
+    val expectedEpochMs: Long,
+    val triggerAtMs: Long
+)
+
 data class WidgetConfig(
     val slots: List<StationSlot>,
     val activeSlotIndex: Int,
     val opacityPercent: Int = 85,
     val theme: WidgetTheme = WidgetTheme.AUTO,
-    val nearbyOverride: NearbyOverride? = null
+    val resolvedNearMe: NearbyOverride? = null
 ) {
-    val activeSlot: StationSlot
+    val selectedSlot: StationSlot
+        get() = slots.getOrElse(activeSlotIndex) {
+            slots.firstOrNull() ?: StationSlot(WidgetPrefs.DEFAULT_SITE_ID, WidgetPrefs.DEFAULT_STATION_NAME)
+        }
+
+    val isActiveNearMe: Boolean
+        get() = selectedSlot.isNearMe
+
+    val effectiveSlot: StationSlot
         get() {
-            val near = nearbyOverride
-            if (near != null) {
-                return StationSlot(
-                    siteId = near.siteId,
-                    stationName = near.stationName,
-                    filter = ModeFilter.ALL,
-                    walkMinutes = near.walkMinutes
-                )
+            val sel = selectedSlot
+            if (sel.isNearMe) {
+                val near = resolvedNearMe
+                if (near != null) {
+                    return StationSlot(
+                        siteId = near.siteId,
+                        stationName = near.stationName,
+                        filter = sel.filter,
+                        walkMinutes = near.walkMinutes
+                    )
+                }
             }
-            return slots.getOrElse(activeSlotIndex) {
-                slots.firstOrNull() ?: StationSlot(WidgetPrefs.DEFAULT_SITE_ID, WidgetPrefs.DEFAULT_STATION_NAME)
-            }
+            return sel
         }
 }
 
@@ -83,8 +106,9 @@ object WidgetPrefs {
     private const val KEY_SHARED_THEME = "shared_theme"
     private const val KEY_ACTIVE_SLOT = "active_slot_"
     private const val KEY_NEARBY_OVERRIDE = "nearby_override_"
+    private const val KEY_ACTIVE_REMINDERS = "active_reminders_json"
+    private const val KEY_NOTIF_PROMPTED = "notif_perm_prompted_v21"
 
-    // Legacy v1.x per-widget keys for seamless upgrade
     private const val LEGACY_SLOTS_JSON = "slots_json_"
     private const val LEGACY_OPACITY = "opacity_pct_"
 
@@ -92,8 +116,25 @@ object WidgetPrefs {
     private const val KEY_SITES_FETCHED_MS = "cached_sites_v2_ms"
     private const val SITES_CACHE_TTL_MS = 7L * 24L * 60L * 60L * 1000L
 
+    const val NEAR_ME_SITE_ID = -100
+    const val NEAR_ME_LABEL = "📍 Near me"
     const val DEFAULT_SITE_ID = 9001
     const val DEFAULT_STATION_NAME = "T-Centralen"
+
+    fun nearMeSlot(filter: ModeFilter = ModeFilter.ALL, walkMinutes: Int = 3): StationSlot {
+        return StationSlot(NEAR_ME_SITE_ID, NEAR_ME_LABEL, filter, walkMinutes)
+    }
+
+    fun wasNotifPrompted(context: Context): Boolean {
+        return context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_NOTIF_PROMPTED, false)
+    }
+
+    fun markNotifPrompted(context: Context) {
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_NOTIF_PROMPTED, true)
+            .apply()
+    }
 
     fun saveSharedSettings(
         context: Context,
@@ -127,7 +168,6 @@ object WidgetPrefs {
         val parsed = parseSlotsJson(raw)
         if (parsed.isNotEmpty()) return parsed
 
-        // Seamless migration from any v1.x widget slot config
         for ((k, v) in prefs.all) {
             if (k.startsWith(LEGACY_SLOTS_JSON) && v is String) {
                 val migrated = parseSlotsJson(v)
@@ -138,7 +178,10 @@ object WidgetPrefs {
                 }
             }
         }
-        return listOf(StationSlot(DEFAULT_SITE_ID, DEFAULT_STATION_NAME, ModeFilter.AUTO, 3))
+        return listOf(
+            StationSlot(DEFAULT_SITE_ID, DEFAULT_STATION_NAME, ModeFilter.AUTO, 3),
+            nearMeSlot(ModeFilter.ALL, 3)
+        )
     }
 
     fun loadSharedOpacity(context: Context): Int {
@@ -166,11 +209,10 @@ object WidgetPrefs {
         val safeIdx = slotIndex.coerceIn(0, (slots.size - 1).coerceAtLeast(0))
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putInt(KEY_ACTIVE_SLOT + appWidgetId, safeIdx)
-            .remove(KEY_NEARBY_OVERRIDE + appWidgetId)
             .apply()
     }
 
-    fun setNearbyOverride(context: Context, appWidgetId: Int, override: NearbyOverride) {
+    fun setResolvedNearMe(context: Context, appWidgetId: Int, override: NearbyOverride) {
         val json = JSONObject()
             .put("siteId", override.siteId)
             .put("name", override.stationName)
@@ -180,12 +222,6 @@ object WidgetPrefs {
             .toString()
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putString(KEY_NEARBY_OVERRIDE + appWidgetId, json)
-            .apply()
-    }
-
-    fun clearNearbyOverride(context: Context, appWidgetId: Int) {
-        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-            .remove(KEY_NEARBY_OVERRIDE + appWidgetId)
             .apply()
     }
 
@@ -201,8 +237,82 @@ object WidgetPrefs {
             activeSlotIndex = active,
             opacityPercent = opacity,
             theme = theme,
-            nearbyOverride = near
+            resolvedNearMe = near
         )
+    }
+
+    // Active Departure Reminders (auto-pruned past departure time)
+    fun loadActiveReminders(context: Context): List<ActiveReminder> {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val raw = prefs.getString(KEY_ACTIVE_REMINDERS, null) ?: return emptyList()
+        val nowMs = System.currentTimeMillis()
+        return try {
+            val arr = JSONArray(raw)
+            val live = mutableListOf<ActiveReminder>()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val trigger = o.optLong("triggerAtMs", 0L)
+                val expected = o.optLong("expectedEpochMs", 0L)
+                if (trigger > nowMs - 15_000L && expected > nowMs - 15_000L) {
+                    live.add(
+                        ActiveReminder(
+                            key = o.optString("key", ""),
+                            requestCode = o.optInt("req", 0),
+                            stationName = o.optString("station", ""),
+                            designation = o.optString("line", ""),
+                            destination = o.optString("dest", ""),
+                            walkMinutes = o.optInt("walk", 3),
+                            expectedEpochMs = expected,
+                            triggerAtMs = trigger
+                        )
+                    )
+                }
+            }
+            if (live.size != arr.length()) {
+                persistReminders(context, live)
+            }
+            live
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun findReminder(context: Context, key: String): ActiveReminder? {
+        return loadActiveReminders(context).firstOrNull { it.key == key }
+    }
+
+    fun saveReminder(context: Context, reminder: ActiveReminder) {
+        val updated = loadActiveReminders(context).filterNot { it.key == reminder.key } + reminder
+        persistReminders(context, updated)
+    }
+
+    fun removeReminder(context: Context, key: String): ActiveReminder? {
+        val current = loadActiveReminders(context)
+        val removed = current.firstOrNull { it.key == key }
+        if (removed != null) {
+            persistReminders(context, current.filterNot { it.key == key })
+        }
+        return removed
+    }
+
+    private fun persistReminders(context: Context, list: List<ActiveReminder>) {
+        val arr = JSONArray()
+        for (r in list) {
+            arr.put(
+                JSONObject()
+                    .put("key", r.key)
+                    .put("req", r.requestCode)
+                    .put("station", r.stationName)
+                    .put("line", r.designation)
+                    .put("dest", r.destination)
+                    .put("walk", r.walkMinutes)
+                    .put("expectedEpochMs", r.expectedEpochMs)
+                    .put("triggerAtMs", r.triggerAtMs)
+            )
+        }
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putString(KEY_ACTIVE_REMINDERS, arr.toString())
+            .apply()
     }
 
     private fun parseNearby(raw: String?): NearbyOverride? {
@@ -236,7 +346,7 @@ object WidgetPrefs {
                 val name = obj.optString("name", "").trim()
                 val filter = ModeFilter.fromCode(obj.optString("filter", "AUTO"))
                 val walk = obj.optInt("walkMinutes", 3).coerceIn(0, 30)
-                if (id > 0 && name.isNotEmpty()) {
+                if ((id > 0 || id == NEAR_ME_SITE_ID) && name.isNotEmpty()) {
                     parsed.add(StationSlot(id, name, filter, walk))
                 }
             }

@@ -2,8 +2,10 @@ package se.dnyx.sthlmmetro
 
 import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -36,17 +38,19 @@ class MainActivity : AppCompatActivity() {
     private val uiHandler = Handler(Looper.getMainLooper())
     private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
-    private var slots: List<StationSlot> = emptyList()
+    private var allSlots: List<StationSlot> = emptyList()
+    private var pinnedSlots: List<Pair<Int, StationSlot>> = emptyList()
     private var nearMeMode = false
-    private var selectedSlotIdx = 0
+    private var selectedPinnedIdx = 0
     private var nearbyStops: List<NearbyStop> = emptyList()
     private var selectedNearbyIdx = 0
 
     private var activeFilter: ModeFilter = ModeFilter.ALL
-    private var dirFilter: Int = 0 // 0 = All, 1 = Dir 1, 2 = Dir 2
+    private var dirFilter: Int = 0
 
     private var rawDepartures: List<DepartureItem> = emptyList()
     private var visibleDepartures: List<DepartureItem> = emptyList()
+    private var activeRemindersMap: Map<String, ActiveReminder> = emptyMap()
     private var lastSyncedMs: Long = 0L
 
     private lateinit var pillNearMe: TextView
@@ -73,14 +77,18 @@ class MainActivity : AppCompatActivity() {
             if (ok) {
                 loadNearMeStops()
             } else {
-                showState("Location denied. Allow GPS to use Near Me.", showCat = false, actionLabel = "ALLOW LOCATION") {
+                showState("Location denied. Allow GPS to use Near me.", showCat = false, actionLabel = "ALLOW LOCATION") {
                     requestLocationAndLoad()
                 }
             }
         }
 
+    private val notifPermLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> }
+
     private val tickRunnable = object : Runnable {
         override fun run() {
+            activeRemindersMap = WidgetPrefs.loadActiveReminders(this@MainActivity).associateBy { it.key }
             applyFiltersAndRenderList()
             uiHandler.postDelayed(this, 1000L)
         }
@@ -164,11 +172,11 @@ class MainActivity : AppCompatActivity() {
 
         stopPills.forEachIndexed { idx, pill ->
             pill.setOnClickListener {
-                if (idx < slots.size) {
+                if (idx < pinnedSlots.size) {
                     nearMeMode = false
-                    selectedSlotIdx = idx
+                    selectedPinnedIdx = idx
                     dirFilter = 0
-                    val slotFilter = slots[idx].filter
+                    val slotFilter = pinnedSlots[idx].second.filter
                     activeFilter = if (slotFilter == ModeFilter.AUTO) ModeFilter.ALL else slotFilter
                     renderTopPills()
                     renderFilterChips()
@@ -193,10 +201,11 @@ class MainActivity : AppCompatActivity() {
 
         listView.setOnItemClickListener { _, _, position, _ ->
             val d = visibleDepartures.getOrNull(position) ?: return@setOnItemClickListener
-            val (stopName, walkMin, slotIdxForSave) = currentStopInfo()
+            val (stopName, walkMin, origSlotIdx) = currentStopInfo()
             startActivity(
                 Intent(this, DepartureReminderActivity::class.java).apply {
-                    putExtra(DepartureReminderActivity.EXTRA_SLOT_INDEX, slotIdxForSave)
+                    putExtra(DepartureReminderActivity.EXTRA_SITE_ID, currentSiteId())
+                    putExtra(DepartureReminderActivity.EXTRA_SLOT_INDEX, origSlotIdx)
                     putExtra(DepartureReminderActivity.EXTRA_STATION_NAME, stopName)
                     putExtra(DepartureReminderActivity.EXTRA_DESIGNATION, d.designation)
                     putExtra(DepartureReminderActivity.EXTRA_DESTINATION, d.destination)
@@ -211,7 +220,16 @@ class MainActivity : AppCompatActivity() {
         val source = intent?.getStringExtra(EXTRA_LAUNCH_SOURCE) ?: "launcher"
         AnalyticsHelper.logAppOpened(this, source)
 
-        // Quietly check for app updates -> lights up tiny cyan dot on ⚙ icon only
+        // Politely request notification permission once on Android 13+ so reminder banners show cleanly
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !WidgetPrefs.wasNotifPrompted(this)) {
+            val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+            WidgetPrefs.markNotifPrompted(this)
+            if (!granted) {
+                notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
         AppUpdater.checkInBackground { info ->
             if (info?.isNewer == true) {
                 runOnUiThread {
@@ -222,7 +240,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Pre-warm offline Stockholm SL sites cache once per week
         executor.execute {
             if (WidgetPrefs.loadFreshSitesCache(this) == null) {
                 try {
@@ -240,12 +257,15 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         AnalyticsHelper.syncCollectionState(this)
+        activeRemindersMap = WidgetPrefs.loadActiveReminders(this).associateBy { it.key }
         val latestSlots = WidgetPrefs.loadSharedSlots(this)
-        if (latestSlots != slots) {
-            slots = latestSlots
-            if (selectedSlotIdx >= slots.size) selectedSlotIdx = 0
+        if (latestSlots != allSlots) {
+            allSlots = latestSlots
+            pinnedSlots = allSlots.mapIndexedNotNull { idx, s -> if (s.isNearMe) null else idx to s }
+            if (selectedPinnedIdx >= pinnedSlots.size) selectedPinnedIdx = 0
+            if (pinnedSlots.isEmpty()) nearMeMode = true
             renderTopPills()
-            if (!nearMeMode) fetchActiveStopDepartures()
+            if (nearMeMode) requestLocationAndLoad() else fetchActiveStopDepartures()
         }
         uiHandler.post(tickRunnable)
     }
@@ -256,9 +276,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun reloadSharedSlotsAndFetch() {
-        slots = WidgetPrefs.loadSharedSlots(this)
-        if (selectedSlotIdx >= slots.size) selectedSlotIdx = 0
-        val initFilter = slots.getOrNull(selectedSlotIdx)?.filter ?: ModeFilter.AUTO
+        allSlots = WidgetPrefs.loadSharedSlots(this)
+        pinnedSlots = allSlots.mapIndexedNotNull { idx, s -> if (s.isNearMe) null else idx to s }
+        if (pinnedSlots.isEmpty()) {
+            nearMeMode = true
+            renderTopPills()
+            renderFilterChips()
+            renderDirButton()
+            requestLocationAndLoad()
+            return
+        }
+        if (selectedPinnedIdx >= pinnedSlots.size) selectedPinnedIdx = 0
+        val initFilter = pinnedSlots.getOrNull(selectedPinnedIdx)?.second?.filter ?: ModeFilter.AUTO
         activeFilter = if (initFilter == ModeFilter.AUTO) ModeFilter.ALL else initFilter
         renderTopPills()
         renderFilterChips()
@@ -271,16 +300,18 @@ class MainActivity : AppCompatActivity() {
             val near = nearbyStops.getOrNull(selectedNearbyIdx)
             if (near != null) return Triple(near.name, near.walkMinutes, -1)
         }
-        val slot = slots.getOrNull(selectedSlotIdx)
-            ?: StationSlot(WidgetPrefs.DEFAULT_SITE_ID, WidgetPrefs.DEFAULT_STATION_NAME, ModeFilter.AUTO, 3)
-        return Triple(slot.stationName, slot.walkMinutes, selectedSlotIdx)
+        val pair = pinnedSlots.getOrNull(selectedPinnedIdx)
+        if (pair != null) {
+            return Triple(pair.second.stationName, pair.second.walkMinutes, pair.first)
+        }
+        return Triple(WidgetPrefs.DEFAULT_STATION_NAME, 3, -1)
     }
 
     private fun currentSiteId(): Int {
         if (nearMeMode) {
             nearbyStops.getOrNull(selectedNearbyIdx)?.let { return it.siteId }
         }
-        return slots.getOrNull(selectedSlotIdx)?.siteId ?: WidgetPrefs.DEFAULT_SITE_ID
+        return pinnedSlots.getOrNull(selectedPinnedIdx)?.second?.siteId ?: WidgetPrefs.DEFAULT_SITE_ID
     }
 
     private fun open3dWebRadar() {
@@ -381,7 +412,7 @@ class MainActivity : AppCompatActivity() {
             val dist = nearbyStops.getOrNull(selectedNearbyIdx)?.distanceMeters ?: 0
             "📍 ${dist}m · ${walkMin} min walk · Updating…"
         } else {
-            "${walkMin}m walk buffer · Updating…"
+            "Walk ${walkMin}m · Updating…"
         }
 
         if (rawDepartures.isEmpty()) {
@@ -390,7 +421,6 @@ class MainActivity : AppCompatActivity() {
 
         executor.execute {
             try {
-                // Fetch ALL modes so user can switch All/Metro/Bus/Pendel locally with 0 extra SL calls!
                 val list = SlApiClient.fetchDepartures(siteId, ModeFilter.ALL, limit = 24)
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
@@ -488,17 +518,17 @@ class MainActivity : AppCompatActivity() {
         pillNearMe.setTextColor(if (nearMeMode) dark else primary)
 
         for (i in 0 until 3) {
-            if (i < slots.size) {
+            if (i < pinnedSlots.size) {
                 stopPills[i].visibility = View.VISIBLE
-                stopPills[i].text = MetroWidgetProvider.shortenTabLabel(slots[i].stationName)
-                val active = !nearMeMode && i == selectedSlotIdx
+                stopPills[i].text = MetroWidgetProvider.shortenTabLabel(pinnedSlots[i].second.stationName)
+                val active = !nearMeMode && i == selectedPinnedIdx
                 stopPills[i].setBackgroundResource(if (active) R.drawable.chip_active else R.drawable.chip_idle)
                 stopPills[i].setTextColor(if (active) dark else primary)
             } else {
                 stopPills[i].visibility = View.GONE
             }
         }
-        pillAddStop.visibility = if (slots.size < 3) View.VISIBLE else View.GONE
+        pillAddStop.visibility = if (allSlots.size < 3) View.VISIBLE else View.GONE
         nearbyStripScroll.visibility = if (nearMeMode && nearbyStops.size > 1) View.VISIBLE else View.GONE
     }
 
@@ -570,6 +600,10 @@ class MainActivity : AppCompatActivity() {
             val nowMs = System.currentTimeMillis()
             val remainingSec = if (d.expectedEpochMs > 0L) ((d.expectedEpochMs - nowMs) / 1000L).toInt() else -1
 
+            val siteId = currentSiteId()
+            val remKey = ReminderManager.buildKey(siteId, d.designation, d.destination, d.expectedEpochMs)
+            val activeRem = activeRemindersMap[remKey]
+
             val badge = v.findViewById<TextView>(R.id.dep_badge)
             badge.text = d.designation
             badge.setBackgroundResource(MetroWidgetProvider.badgeDrawableFor(d.badgeStyle))
@@ -582,6 +616,7 @@ class MainActivity : AppCompatActivity() {
 
             val sub = v.findViewById<TextView>(R.id.dep_sub)
             val parts = mutableListOf<String>()
+            if (activeRem != null) parts.add("🔔 ${ReminderManager.formatClock(activeRem.triggerAtMs)}")
             if (d.stopPoint.isNotEmpty()) parts.add("Bay ${d.stopPoint}")
             if (d.cancelled) parts.add("Cancelled")
             else if (d.delayMinutes > 0) parts.add("+${d.delayMinutes}m late")
@@ -594,6 +629,7 @@ class MainActivity : AppCompatActivity() {
                         this@MainActivity,
                         when {
                             d.cancelled -> R.color.rose_cancel
+                            activeRem != null -> R.color.cyan_accent
                             d.delayMinutes > 0 -> R.color.amber_warn
                             else -> R.color.text_secondary
                         }

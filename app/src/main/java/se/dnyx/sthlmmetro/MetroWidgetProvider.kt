@@ -9,10 +9,13 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.util.SizeF
 import android.view.View
 import android.widget.RemoteViews
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import java.io.IOException
 import java.net.SocketTimeoutException
@@ -31,14 +34,17 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             try {
                 for (widgetId in appWidgetIds) {
                     val cfg = WidgetPrefs.load(context, widgetId)
+                    val eff = cfg.effectiveSlot
                     val cached = WidgetPrefs.loadCache(context, "w_$widgetId")
                     val cacheMatches = cached != null &&
-                        cached.siteId == cfg.activeSlot.siteId &&
-                        cached.filterCode == cfg.activeSlot.filter.code
+                        cached.siteId == eff.siteId &&
+                        cached.filterCode == eff.filter.code
                     if (cacheMatches) {
                         renderFromCache(context, appWidgetManager, widgetId, cfg, cached!!, logEmptyCat = false)
-                    } else {
+                    } else if (eff.siteId > 0) {
                         refreshWidgetBlocking(context, appWidgetManager, widgetId, trigger = "system", isFinalAttempt = true)
+                    } else {
+                        showWidgetStatus(context, appWidgetManager, widgetId, "Tap 📍 Near me", "Tap 📍 Near me or ↻ to locate")
                     }
                 }
             } finally {
@@ -54,10 +60,11 @@ open class MetroWidgetProvider : AppWidgetProvider() {
         newOptions: Bundle
     ) {
         val cfg = WidgetPrefs.load(context, appWidgetId)
+        val eff = cfg.effectiveSlot
         val cached = WidgetPrefs.loadCache(context, "w_$appWidgetId")
         if (cached != null &&
-            cached.siteId == cfg.activeSlot.siteId &&
-            cached.filterCode == cfg.activeSlot.filter.code
+            cached.siteId == eff.siteId &&
+            cached.filterCode == eff.filter.code
         ) {
             renderFromCache(context, appWidgetManager, appWidgetId, cfg, cached, logEmptyCat = false)
         }
@@ -69,6 +76,7 @@ open class MetroWidgetProvider : AppWidgetProvider() {
         if (action != ACTION_REFRESH &&
             action != ACTION_CAT_POKE &&
             action != ACTION_SELECT_SLOT &&
+            action != ACTION_TOGGLE_REMINDER &&
             action != ACTION_LOCAL_TICK
         ) return
 
@@ -76,6 +84,13 @@ open class MetroWidgetProvider : AppWidgetProvider() {
 
         val widgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
         val appWidgetManager = AppWidgetManager.getInstance(context)
+
+        // Silent 1-tap 🔔 Reminder Toggle right inside the widget (NO app opens!)
+        if (action == ACTION_TOGGLE_REMINDER) {
+            handleSilentReminderToggle(context, appWidgetManager, intent)
+            return
+        }
+
         val ids = if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
             intArrayOf(widgetId)
         } else {
@@ -86,10 +101,11 @@ open class MetroWidgetProvider : AppWidgetProvider() {
         if (action == ACTION_LOCAL_TICK) {
             for (id in ids) {
                 val cfg = WidgetPrefs.load(context, id)
+                val eff = cfg.effectiveSlot
                 val cached = WidgetPrefs.loadCache(context, "w_$id")
                 if (cached != null &&
-                    cached.siteId == cfg.activeSlot.siteId &&
-                    cached.filterCode == cfg.activeSlot.filter.code
+                    cached.siteId == eff.siteId &&
+                    cached.filterCode == eff.filter.code
                 ) {
                     renderFromCache(context, appWidgetManager, id, cfg, cached, logEmptyCat = true)
                 }
@@ -101,7 +117,7 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             val slotIndex = intent.getIntExtra(EXTRA_SLOT_INDEX, 0)
             WidgetPrefs.setActiveSlot(context, widgetId, slotIndex)
             val updatedCfg = WidgetPrefs.load(context, widgetId)
-            AnalyticsHelper.logWidgetTabSwitched(context, updatedCfg.activeSlot, updatedCfg.activeSlotIndex)
+            AnalyticsHelper.logWidgetTabSwitched(context, updatedCfg.effectiveSlot, updatedCfg.activeSlotIndex)
         }
 
         val nowMs = System.currentTimeMillis()
@@ -113,13 +129,33 @@ open class MetroWidgetProvider : AppWidgetProvider() {
 
         for (id in ids) {
             val cfg = WidgetPrefs.load(context, id)
+
+            // If active slot is 📍 Near me -> run SILENT in-widget GPS refresh (only prompt if permission missing!)
+            if (cfg.isActiveNearMe) {
+                if (LocationHelper.hasLocationPermission(context)) {
+                    showWidgetStatus(context, appWidgetManager, id, "Locating…", "Finding closest SL stop…")
+                    val svcIntent = Intent(context, WidgetLocationService::class.java).apply {
+                        putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                    }
+                    try {
+                        ContextCompat.startForegroundService(context, svcIntent)
+                    } catch (_: Exception) {
+                        launchLocationPermissionPopup(context, id)
+                    }
+                } else {
+                    launchLocationPermissionPopup(context, id)
+                }
+                continue
+            }
+
+            val eff = cfg.effectiveSlot
             val cached = WidgetPrefs.loadCache(context, "w_$id")
             val cacheMatches = cached != null &&
-                cached.siteId == cfg.activeSlot.siteId &&
-                cached.filterCode == cfg.activeSlot.filter.code
+                cached.siteId == eff.siteId &&
+                cached.filterCode == eff.filter.code
 
             if (action == ACTION_CAT_POKE) {
-                AnalyticsHelper.logWidgetCatPoked(context, cfg.activeSlot)
+                AnalyticsHelper.logWidgetCatPoked(context, eff)
             }
 
             if ((action == ACTION_REFRESH || action == ACTION_CAT_POKE) &&
@@ -130,13 +166,65 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                 continue
             }
 
-            // Show immediate responsive loading banner
-            val loadingViews = buildResponsiveViews(context, appWidgetManager, id, cfg) { layoutType ->
-                buildStatusLayout(context, id, cfg, layoutType, "Refreshing SL…", "Loading ${cfg.activeSlot.stationName}…")
-            }
-            appWidgetManager.updateAppWidget(id, loadingViews)
-
+            showWidgetStatus(context, appWidgetManager, id, "Refreshing SL…", "Loading ${eff.stationName}…")
             WidgetRefreshWorker.enqueue(context, id, triggerLabel)
+        }
+    }
+
+    private fun handleSilentReminderToggle(context: Context, manager: AppWidgetManager, intent: Intent) {
+        val siteId = intent.getIntExtra(EXTRA_REM_SITE_ID, -1)
+        val stationName = intent.getStringExtra(EXTRA_REM_STATION).orEmpty()
+        val designation = intent.getStringExtra(EXTRA_REM_LINE).orEmpty()
+        val destination = intent.getStringExtra(EXTRA_REM_DEST).orEmpty()
+        val expectedMs = intent.getLongExtra(EXTRA_REM_EXPECTED_MS, 0L)
+        val walkMin = intent.getIntExtra(EXTRA_REM_WALK_MIN, 3)
+
+        if (siteId <= 0 || expectedMs <= 0L) return
+
+        AnalyticsHelper.logDepartureTapped(context, stationName, designation, destination, walkMin)
+
+        val result = ReminderManager.toggleReminder(
+            context = context,
+            siteId = siteId,
+            stationName = stationName,
+            designation = designation,
+            destination = destination,
+            expectedEpochMs = expectedMs,
+            walkMinutes = walkMin
+        )
+
+        val toastMsg = when (result) {
+            is ReminderToggleResult.Scheduled ->
+                "🔔 Ring at ${result.ringTimeStr} (${walkMin}m before $designation → $destination)"
+            is ReminderToggleResult.Cancelled ->
+                "🔕 Reminder cancelled"
+            is ReminderToggleResult.TooClose -> {
+                val mins = result.remainingSeconds / 60
+                val secs = result.remainingSeconds % 60
+                val timeStr = if (mins > 0) "${mins}m ${secs}s" else "${secs}s"
+                "🏃 Leaves in $timeStr — leave now!"
+            }
+            is ReminderToggleResult.Departed ->
+                "Already departed — tap ↻"
+        }
+
+        mainHandler.post {
+            Toast.makeText(context.applicationContext, toastMsg, Toast.LENGTH_SHORT).show()
+        }
+
+        // Re-render widgets immediately so 🔔 HH:mm appears/clears right inside the row!
+        rerenderAllFromCache(context, manager)
+    }
+
+    private fun launchLocationPermissionPopup(context: Context, appWidgetId: Int) {
+        val intent = Intent(context, WidgetLocationActivity::class.java).apply {
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        try {
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            // Ignore
         }
     }
 
@@ -174,11 +262,21 @@ open class MetroWidgetProvider : AppWidgetProvider() {
         const val ACTION_REFRESH = "se.dnyx.sthlmmetro.ACTION_REFRESH_WIDGET"
         const val ACTION_CAT_POKE = "se.dnyx.sthlmmetro.ACTION_CAT_POKE"
         const val ACTION_SELECT_SLOT = "se.dnyx.sthlmmetro.ACTION_SELECT_SLOT"
+        const val ACTION_TOGGLE_REMINDER = "se.dnyx.sthlmmetro.ACTION_TOGGLE_REMINDER"
         const val ACTION_LOCAL_TICK = "se.dnyx.sthlmmetro.ACTION_LOCAL_TICK"
         const val EXTRA_SLOT_INDEX = "slot_index"
+
+        private const val EXTRA_REM_SITE_ID = "rem_site_id"
+        private const val EXTRA_REM_STATION = "rem_station"
+        private const val EXTRA_REM_LINE = "rem_line"
+        private const val EXTRA_REM_DEST = "rem_dest"
+        private const val EXTRA_REM_EXPECTED_MS = "rem_expected_ms"
+        private const val EXTRA_REM_WALK_MIN = "rem_walk_min"
+
         private const val REFRESH_COOLDOWN_MS = 5_000L
 
         private val executor = Executors.newSingleThreadExecutor()
+        private val mainHandler = Handler(Looper.getMainLooper())
         private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
         private val TAB_IDS = intArrayOf(R.id.widget_tab_0, R.id.widget_tab_1, R.id.widget_tab_2)
@@ -196,15 +294,58 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             return (boardIds.toList() + miniIds.toList()).distinct().toIntArray()
         }
 
+        fun rerenderAllFromCache(context: Context, manager: AppWidgetManager = AppWidgetManager.getInstance(context)) {
+            for (id in allWidgetIds(context, manager)) {
+                val cfg = WidgetPrefs.load(context, id)
+                val eff = cfg.effectiveSlot
+                val cached = WidgetPrefs.loadCache(context, "w_$id")
+                if (cached != null &&
+                    cached.siteId == eff.siteId &&
+                    cached.filterCode == eff.filter.code
+                ) {
+                    renderFromCache(context, manager, id, cfg, cached, logEmptyCat = false)
+                }
+            }
+        }
+
         fun refreshAllWidgets(context: Context, trigger: String = "settings_save") {
             val manager = AppWidgetManager.getInstance(context)
             for (id in allWidgetIds(context, manager)) {
+                val cfg = WidgetPrefs.load(context, id)
+                if (cfg.isActiveNearMe && LocationHelper.hasLocationPermission(context)) {
+                    try {
+                        ContextCompat.startForegroundService(
+                            context,
+                            Intent(context, WidgetLocationService::class.java).putExtra(
+                                AppWidgetManager.EXTRA_APPWIDGET_ID,
+                                id
+                            )
+                        )
+                        continue
+                    } catch (_: Exception) {
+                        // Fall through
+                    }
+                }
                 WidgetRefreshWorker.enqueue(context, id, trigger)
             }
         }
 
         fun triggerAsyncRefresh(context: Context, appWidgetId: Int, trigger: String = "config_save") {
             WidgetRefreshWorker.enqueue(context, appWidgetId, trigger)
+        }
+
+        fun showWidgetStatus(
+            context: Context,
+            appWidgetManager: AppWidgetManager,
+            appWidgetId: Int,
+            headerNote: String,
+            bodyNote: String
+        ) {
+            val cfg = WidgetPrefs.load(context, appWidgetId)
+            val views = buildResponsiveViews(context, appWidgetManager, appWidgetId, cfg) { layoutType ->
+                buildStatusLayout(context, appWidgetId, cfg, layoutType, headerNote, bodyNote)
+            }
+            appWidgetManager.updateAppWidget(appWidgetId, views)
         }
 
         fun refreshWidgetBlocking(
@@ -215,34 +356,39 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             isFinalAttempt: Boolean = true
         ): RefreshOutcome {
             val cfg = WidgetPrefs.load(context, appWidgetId)
-            val active = cfg.activeSlot
-            AnalyticsHelper.logWidgetRefreshed(context, active, cfg.activeSlotIndex, trigger)
+            val eff = cfg.effectiveSlot
+            if (eff.siteId <= 0) {
+                showWidgetStatus(context, appWidgetManager, appWidgetId, "Tap 📍 Near me", "Tap 📍 Near me to locate")
+                return RefreshOutcome.DONE
+            }
+
+            AnalyticsHelper.logWidgetRefreshed(context, eff, cfg.activeSlotIndex, trigger)
 
             try {
                 val fetched = try {
-                    SlApiClient.fetchDepartures(active.siteId, active.filter, limit = 20)
+                    SlApiClient.fetchDepartures(eff.siteId, eff.filter, limit = 20)
                 } catch (_: IOException) {
                     Thread.sleep(1200L)
-                    SlApiClient.fetchDepartures(active.siteId, active.filter, limit = 20)
+                    SlApiClient.fetchDepartures(eff.siteId, eff.filter, limit = 20)
                 }
                 val fetchedAtMs = System.currentTimeMillis()
                 WidgetPrefs.saveCache(
                     context = context,
                     cacheKey = "w_$appWidgetId",
-                    siteId = active.siteId,
-                    filter = active.filter,
+                    siteId = eff.siteId,
+                    filter = eff.filter,
                     fetchedAtMs = fetchedAtMs,
                     items = fetched
                 )
-                val cache = CachedSlotDepartures(active.siteId, active.filter.code, fetchedAtMs, fetched)
+                val cache = CachedSlotDepartures(eff.siteId, eff.filter.code, fetchedAtMs, fetched)
                 renderFromCache(context, appWidgetManager, appWidgetId, cfg, cache, logEmptyCat = true)
                 return RefreshOutcome.DONE
             } catch (_: SlRateLimitException) {
-                AnalyticsHelper.logSlError(context, active, "429_rate_limit")
+                AnalyticsHelper.logSlError(context, eff, "429_rate_limit")
                 renderFailure(context, appWidgetManager, appWidgetId, cfg, "SL 429 limit", "SL rate limit (429). Tap ↻.")
                 return RefreshOutcome.DONE
             } catch (e: SlHttpException) {
-                AnalyticsHelper.logSlError(context, active, "http_${e.statusCode}")
+                AnalyticsHelper.logSlError(context, eff, "http_${e.statusCode}")
                 renderFailure(context, appWidgetManager, appWidgetId, cfg, "SL HTTP ${e.statusCode}", "SL HTTP ${e.statusCode}. Tap ↻.")
                 return RefreshOutcome.DONE
             } catch (e: IOException) {
@@ -252,16 +398,12 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                     is SocketTimeoutException -> "timeout"
                     else -> "io"
                 }
-                AnalyticsHelper.logSlError(context, active, "network_$tag")
-                val shortMsg = when (e) {
-                    is UnknownHostException -> "Offline"
-                    is SocketTimeoutException -> "Timed out"
-                    else -> "Offline"
-                }
+                AnalyticsHelper.logSlError(context, eff, "network_$tag")
+                val shortMsg = if (e is SocketTimeoutException) "Timed out" else "Offline"
                 renderFailure(context, appWidgetManager, appWidgetId, cfg, "$shortMsg · Tap ↻", "$shortMsg · Tap ↻")
                 return RefreshOutcome.DONE
             } catch (_: Exception) {
-                AnalyticsHelper.logSlError(context, active, "unknown")
+                AnalyticsHelper.logSlError(context, eff, "unknown")
                 renderFailure(context, appWidgetManager, appWidgetId, cfg, "Offline · Tap ↻", "Offline · Tap ↻")
                 return RefreshOutcome.DONE
             }
@@ -275,11 +417,12 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             headerNote: String,
             bodyNote: String
         ) {
+            val eff = cfg.effectiveSlot
             val cached = WidgetPrefs.loadCache(context, "w_$appWidgetId")
             val nowMs = System.currentTimeMillis()
             val hasLiveCache = cached != null &&
-                cached.siteId == cfg.activeSlot.siteId &&
-                cached.filterCode == cfg.activeSlot.filter.code &&
+                cached.siteId == eff.siteId &&
+                cached.filterCode == eff.filter.code &&
                 cached.items.any { it.expectedEpochMs <= 0L || it.expectedEpochMs > nowMs - 10_000L }
 
             if (hasLiveCache) {
@@ -303,7 +446,7 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             logEmptyCat: Boolean,
             overrideSubtitle: String? = null
         ) {
-            val active = cfg.activeSlot
+            val eff = cfg.effectiveSlot
             val nowMs = System.currentTimeMillis()
             val syncClock = Instant.ofEpochMilli(cache.fetchedAtMs)
                 .atZone(ZoneId.systemDefault())
@@ -315,10 +458,9 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             }
 
             if (upcoming.isEmpty()) {
-                // Auto-purge expired timetable cache to keep storage minimal!
                 WidgetPrefs.clearCache(context, "w_$appWidgetId")
                 if (logEmptyCat) {
-                    AnalyticsHelper.logWidgetCatShown(context, active)
+                    AnalyticsHelper.logWidgetCatShown(context, eff)
                 }
                 val views = buildResponsiveViews(context, appWidgetManager, appWidgetId, cfg) { layoutType ->
                     buildEmptyCatLayout(context, appWidgetId, cfg, layoutType, overrideSubtitle ?: syncClock)
@@ -328,9 +470,10 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                 return
             }
 
+            val remindersMap = WidgetPrefs.loadActiveReminders(context).associateBy { it.key }
             val subtitle = overrideSubtitle ?: buildHeaderMeta(cfg, syncClock)
             val views = buildResponsiveViews(context, appWidgetManager, appWidgetId, cfg) { layoutType ->
-                buildDeparturesLayout(context, appWidgetId, cfg, layoutType, subtitle, upcoming, nowMs)
+                buildDeparturesLayout(context, appWidgetId, cfg, layoutType, subtitle, upcoming, remindersMap, nowMs)
             }
 
             val nextRolloverMs = upcoming.take(4)
@@ -347,9 +490,8 @@ open class MetroWidgetProvider : AppWidgetProvider() {
         }
 
         private fun buildHeaderMeta(cfg: WidgetConfig, syncClock: String): String {
-            val near = cfg.nearbyOverride
-            return if (near != null) {
-                "📍 ${near.walkMinutes}m walk · $syncClock"
+            return if (cfg.isActiveNearMe && cfg.resolvedNearMe != null) {
+                "📍 ${cfg.resolvedNearMe.walkMinutes}m walk · $syncClock"
             } else {
                 syncClock
             }
@@ -504,15 +646,19 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             layoutType: LayoutType,
             subtitle: String,
             upcoming: List<DepartureItem>,
+            remindersMap: Map<String, ActiveReminder>,
             nowMs: Long
         ): RemoteViews {
             val palette = resolvePalette(context, cfg.theme)
             val views = createThemedBase(context, appWidgetId, cfg, layoutType, palette)
-            val active = cfg.activeSlot
+            val eff = cfg.effectiveSlot
             val elapsedNow = SystemClock.elapsedRealtime()
 
             if (layoutType == LayoutType.MINI) {
                 val d = upcoming.first()
+                val remKey = ReminderManager.buildKey(eff.siteId, d.designation, d.destination, d.expectedEpochMs)
+                val activeRem = remindersMap[remKey]
+
                 views.setViewVisibility(R.id.mini_status, View.GONE)
                 views.setViewVisibility(R.id.mini_cat_container, View.GONE)
                 views.setViewVisibility(R.id.mini_dep_container, View.VISIBLE)
@@ -522,13 +668,13 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.mini_dest, d.destination)
                 views.setTextColor(R.id.mini_dest, if (d.cancelled) palette.cancel else palette.textPrimary)
 
-                val stopLine = if (cfg.nearbyOverride != null) {
-                    "${shortenTabLabel(active.stationName)} · ${cfg.nearbyOverride.walkMinutes}m"
-                } else {
-                    shortenTabLabel(active.stationName)
+                val stopLine = when {
+                    activeRem != null -> "🔔 ${ReminderManager.formatClock(activeRem.triggerAtMs)} · ${shortenTabLabel(eff.stationName)}"
+                    cfg.isActiveNearMe && cfg.resolvedNearMe != null -> "📍 ${shortenTabLabel(eff.stationName)} · ${cfg.resolvedNearMe.walkMinutes}m"
+                    else -> shortenTabLabel(eff.stationName)
                 }
                 views.setTextViewText(R.id.mini_stop, stopLine)
-                views.setTextColor(R.id.mini_stop, palette.textSecondary)
+                views.setTextColor(R.id.mini_stop, if (activeRem != null) palette.accent else palette.textSecondary)
 
                 val remainingMs = if (d.expectedEpochMs > 0L) d.expectedEpochMs - nowMs else -1L
                 val etaColor = when {
@@ -553,7 +699,7 @@ open class MetroWidgetProvider : AppWidgetProvider() {
 
                 views.setOnClickPendingIntent(
                     R.id.mini_dep_container,
-                    reminderPendingIntent(context, appWidgetId, cfg, d, rowIndex = 0)
+                    toggleReminderPendingIntent(context, appWidgetId, eff, d, rowIndex = 0)
                 )
                 return views
             }
@@ -567,21 +713,37 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             for (i in 0 until maxRows) {
                 if (i < shown.size) {
                     val d = shown[i]
+                    val remKey = ReminderManager.buildKey(eff.siteId, d.designation, d.destination, d.expectedEpochMs)
+                    val activeRem = remindersMap[remKey]
+
                     views.setViewVisibility(ROW_IDS[i], View.VISIBLE)
                     views.setTextViewText(BADGE_IDS[i], d.designation)
                     views.setInt(BADGE_IDS[i], "setBackgroundResource", badgeDrawableFor(d.badgeStyle))
                     views.setTextViewText(DEST_IDS[i], d.destination)
                     views.setTextColor(DEST_IDS[i], if (d.cancelled) palette.cancel else palette.textPrimary)
 
-                    // Minimal UI: hide subtitle unless delayed or cancelled!
+                    // Show 🔔 HH:mm when reminded, or delay/cancel status; otherwise stay ultra-minimal!
+                    val subParts = mutableListOf<String>()
+                    if (activeRem != null) {
+                        subParts.add("🔔 ${ReminderManager.formatClock(activeRem.triggerAtMs)}")
+                    }
                     if (d.cancelled) {
-                        views.setViewVisibility(SUB_IDS[i], View.VISIBLE)
-                        views.setTextViewText(SUB_IDS[i], "Cancelled")
-                        views.setTextColor(SUB_IDS[i], palette.cancel)
+                        subParts.add("Cancelled")
                     } else if (d.delayMinutes > 0) {
+                        subParts.add("+${d.delayMinutes}m late")
+                    }
+
+                    if (subParts.isNotEmpty()) {
                         views.setViewVisibility(SUB_IDS[i], View.VISIBLE)
-                        views.setTextViewText(SUB_IDS[i], "+${d.delayMinutes}m late")
-                        views.setTextColor(SUB_IDS[i], palette.warn)
+                        views.setTextViewText(SUB_IDS[i], subParts.joinToString(" · "))
+                        views.setTextColor(
+                            SUB_IDS[i],
+                            when {
+                                d.cancelled -> palette.cancel
+                                activeRem != null -> palette.accent
+                                else -> palette.warn
+                            }
+                        )
                     } else {
                         views.setViewVisibility(SUB_IDS[i], View.GONE)
                     }
@@ -607,9 +769,10 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                         views.setTextColor(ETA_IDS[i], etaColor)
                     }
 
+                    // 1-tap row toggles 🔔 reminder SILENTLY inside the widget!
                     views.setOnClickPendingIntent(
                         ROW_IDS[i],
-                        reminderPendingIntent(context, appWidgetId, cfg, d, rowIndex = i)
+                        toggleReminderPendingIntent(context, appWidgetId, eff, d, rowIndex = i)
                     )
                 } else {
                     views.setChronometer(CHRONO_IDS[i], elapsedNow, null, false)
@@ -639,11 +802,8 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             views.setImageViewResource(R.id.widget_bg_image, palette.bgRes)
             views.setInt(R.id.widget_bg_image, "setImageAlpha", bgAlpha)
 
-            views.setInt(R.id.widget_near_btn, "setBackgroundResource", palette.btnRes)
             views.setInt(R.id.widget_refresh_btn, "setBackgroundResource", palette.btnRes)
             views.setTextColor(R.id.widget_refresh_btn, palette.accent)
-
-            views.setOnClickPendingIntent(R.id.widget_near_btn, nearMePendingIntent(context, appWidgetId))
             views.setOnClickPendingIntent(R.id.widget_refresh_btn, refreshPendingIntent(context, appWidgetId))
 
             if (layoutType == LayoutType.MINI) {
@@ -658,26 +818,24 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                 views.setInt(ROW_BG_IDS[i], "setImageAlpha", cardAlpha)
             }
 
-            val active = cfg.activeSlot
-            views.setTextViewText(R.id.widget_station_name, active.stationName)
+            val eff = cfg.effectiveSlot
+            views.setTextViewText(R.id.widget_station_name, eff.stationName)
             views.setTextColor(R.id.widget_station_name, palette.textPrimary)
             views.setTextColor(R.id.widget_updated_at, palette.textSecondary)
 
-            // Tapping header or status opens T-Radar app cleanly
             val openAppPi = openAppPendingIntent(context, appWidgetId)
             views.setOnClickPendingIntent(R.id.widget_header_tap, openAppPi)
             views.setOnClickPendingIntent(R.id.widget_status_text, openAppPi)
 
-            // Station switcher tabs (if >1 stop configured)
             if (cfg.slots.size > 1) {
                 views.setViewVisibility(R.id.widget_tabs_bar, View.VISIBLE)
-                val isNearbyActive = cfg.nearbyOverride != null
                 for (i in 0 until 3) {
                     if (i < cfg.slots.size) {
                         val slot = cfg.slots[i]
-                        val isSelected = !isNearbyActive && i == cfg.activeSlotIndex
+                        val isSelected = i == cfg.activeSlotIndex
                         views.setViewVisibility(TAB_IDS[i], View.VISIBLE)
-                        views.setTextViewText(TAB_IDS[i], shortenTabLabel(slot.stationName))
+                        val tabText = if (slot.isNearMe) "📍 Near me" else shortenTabLabel(slot.stationName)
+                        views.setTextViewText(TAB_IDS[i], tabText)
                         views.setInt(
                             TAB_IDS[i],
                             "setBackgroundResource",
@@ -732,19 +890,6 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             )
         }
 
-        private fun nearMePendingIntent(context: Context, appWidgetId: Int): PendingIntent {
-            val intent = Intent(context, WidgetLocationActivity::class.java).apply {
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            return PendingIntent.getActivity(
-                context,
-                appWidgetId * 60 + 2,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-        }
-
         private fun refreshPendingIntent(context: Context, appWidgetId: Int): PendingIntent {
             val intent = Intent(context, MetroWidgetProvider::class.java).apply {
                 action = ACTION_REFRESH
@@ -773,27 +918,25 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             )
         }
 
-        private fun reminderPendingIntent(
+        private fun toggleReminderPendingIntent(
             context: Context,
             appWidgetId: Int,
-            cfg: WidgetConfig,
+            eff: StationSlot,
             d: DepartureItem,
             rowIndex: Int
         ): PendingIntent {
-            val active = cfg.activeSlot
-            val intent = Intent(context, DepartureReminderActivity::class.java).apply {
-                putExtra(DepartureReminderActivity.EXTRA_WIDGET_ID, appWidgetId)
-                putExtra(DepartureReminderActivity.EXTRA_SLOT_INDEX, if (cfg.nearbyOverride != null) -1 else cfg.activeSlotIndex)
-                putExtra(DepartureReminderActivity.EXTRA_STATION_NAME, active.stationName)
-                putExtra(DepartureReminderActivity.EXTRA_DESIGNATION, d.designation)
-                putExtra(DepartureReminderActivity.EXTRA_DESTINATION, d.destination)
-                putExtra(DepartureReminderActivity.EXTRA_CLOCK_TIME, d.clockTime)
-                putExtra(DepartureReminderActivity.EXTRA_EXPECTED_EPOCH_MS, d.expectedEpochMs)
-                putExtra(DepartureReminderActivity.EXTRA_BADGE_STYLE, d.badgeStyle.name)
-                putExtra(DepartureReminderActivity.EXTRA_WALK_MINUTES, active.walkMinutes)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            val intent = Intent(context, MetroWidgetProvider::class.java).apply {
+                action = ACTION_TOGGLE_REMINDER
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                putExtra(EXTRA_REM_SITE_ID, eff.siteId)
+                putExtra(EXTRA_REM_STATION, eff.stationName)
+                putExtra(EXTRA_REM_LINE, d.designation)
+                putExtra(EXTRA_REM_DEST, d.destination)
+                putExtra(EXTRA_REM_EXPECTED_MS, d.expectedEpochMs)
+                putExtra(EXTRA_REM_WALK_MIN, eff.walkMinutes)
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
             }
-            return PendingIntent.getActivity(
+            return PendingIntent.getBroadcast(
                 context,
                 appWidgetId * 60 + 20 + rowIndex,
                 intent,

@@ -1,5 +1,6 @@
 package se.dnyx.sthlmmetro
 
+import android.Manifest
 import android.app.Dialog
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
@@ -19,6 +20,7 @@ import android.widget.ListView
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -48,6 +50,15 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var opacityValue: TextView
     private lateinit var versionLabel: TextView
     private lateinit var updateBadge: TextView
+
+    private val locationPermLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+            val ok = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+            if (ok) {
+                Toast.makeText(this, "📍 Near me ready — updates silently on widget!", Toast.LENGTH_SHORT).show()
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -150,7 +161,6 @@ class SettingsActivity : AppCompatActivity() {
             AppUpdater.showUpdateDialog(this)
         }
 
-        // Hidden Tester Mode: tap version text 5 times to exclude your own device from GA4/Firebase
         versionLabel.setOnClickListener {
             val now = System.currentTimeMillis()
             if (now - lastVersionTapMs > 1500L) versionTapCount = 0
@@ -179,7 +189,6 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        // Load full Stockholm SL stops list (7-day offline cache first)
         executor.execute {
             val cached = WidgetPrefs.loadFreshSitesCache(this)
             val remote = cached ?: try {
@@ -205,11 +214,7 @@ class SettingsActivity : AppCompatActivity() {
             AnalyticsHelper.logWidgetPinned(this, styleName)
             manager.requestPinAppWidget(provider, null, null)
         } else {
-            Toast.makeText(
-                this,
-                "Long-press your Home Screen → Widgets → T-Radar to add it.",
-                Toast.LENGTH_LONG
-            ).show()
+            Toast.makeText(this, "Long-press Home Screen → Widgets → T-Radar to add.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -230,6 +235,21 @@ class SettingsActivity : AppCompatActivity() {
 
         view.findViewById<TextView>(R.id.picker_title).text = "Stop ${slotIdx + 1}"
         view.findViewById<View>(R.id.picker_close).setOnClickListener { dialog.dismiss() }
+
+        // 1-tap 📍 Near me option for ANY slot!
+        view.findViewById<View>(R.id.pk_use_near_me).setOnClickListener {
+            slots[slotIdx] = WidgetPrefs.nearMeSlot(chosenFilter, chosenWalk)
+            renderSlots()
+            dialog.dismiss()
+            if (!LocationHelper.hasLocationPermission(this)) {
+                locationPermLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                )
+            }
+        }
 
         val removeBtn = view.findViewById<TextView>(R.id.picker_remove)
         if (slotIdx > 0 && slots[slotIdx] != null) {
@@ -329,12 +349,19 @@ class SettingsActivity : AppCompatActivity() {
     private fun renderSlots() {
         val primary = ContextCompat.getColor(this, R.color.text_primary)
         val secondary = ContextCompat.getColor(this, R.color.text_secondary)
+        val cyan = ContextCompat.getColor(this, R.color.cyan_accent)
         for (i in 0 until 3) {
             val s = slots[i]
             if (s != null) {
-                slotNames[i].text = s.stationName
-                slotNames[i].setTextColor(primary)
-                slotMetas[i].text = "${s.filter.label} · ${s.walkMinutes}m walk"
+                if (s.isNearMe) {
+                    slotNames[i].text = "📍 Near me (Auto GPS)"
+                    slotNames[i].setTextColor(cyan)
+                    slotMetas[i].text = "${s.filter.label} · Live walk time"
+                } else {
+                    slotNames[i].text = s.stationName
+                    slotNames[i].setTextColor(primary)
+                    slotMetas[i].text = "${s.filter.label} · ${s.walkMinutes}m walk"
+                }
                 slotActions[i]?.text = "EDIT"
             } else {
                 slotNames[i].text = "+ Add stop ${i + 1}"
@@ -375,8 +402,22 @@ class SettingsActivity : AppCompatActivity() {
     private fun saveAndClose() {
         saveCurrentSettings()
         if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-            WidgetPrefs.clearNearbyOverride(this, appWidgetId)
-            MetroWidgetProvider.triggerAsyncRefresh(this, appWidgetId, trigger = "config_save")
+            val cfg = WidgetPrefs.load(this, appWidgetId)
+            if (cfg.isActiveNearMe && LocationHelper.hasLocationPermission(this)) {
+                try {
+                    ContextCompat.startForegroundService(
+                        this,
+                        Intent(this, WidgetLocationService::class.java).putExtra(
+                            AppWidgetManager.EXTRA_APPWIDGET_ID,
+                            appWidgetId
+                        )
+                    )
+                } catch (_: Exception) {
+                    MetroWidgetProvider.triggerAsyncRefresh(this, appWidgetId, trigger = "config_save")
+                }
+            } else {
+                MetroWidgetProvider.triggerAsyncRefresh(this, appWidgetId, trigger = "config_save")
+            }
             setResult(RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId))
         } else {
             MetroWidgetProvider.refreshAllWidgets(this, trigger = "settings_save")

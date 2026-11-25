@@ -5,13 +5,15 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <queries>
-        <intent>
-            <action android:name="android.intent.action.SET_TIMER" />
-        </intent>
         <intent>
             <action android:name="android.support.customtabs.action.CustomTabsService" />
         </intent>
@@ -70,6 +72,20 @@
             android:launchMode="singleTop"
             android:theme="@style/Theme.TRadar.Dialog" />
 
+        <service
+            android:name=".WidgetLocationService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <service
+            android:name=".ReminderChimeService"
+            android:exported="false"
+            android:foregroundServiceType="systemExempted" />
+
+        <receiver
+            android:name=".ReminderAlertReceiver"
+            android:exported="false" />
+
         <receiver
             android:name=".MetroWidgetProvider"
             android:exported="true"
@@ -79,6 +95,7 @@
                 <action android:name="se.dnyx.sthlmmetro.ACTION_REFRESH_WIDGET" />
                 <action android:name="se.dnyx.sthlmmetro.ACTION_CAT_POKE" />
                 <action android:name="se.dnyx.sthlmmetro.ACTION_SELECT_SLOT" />
+                <action android:name="se.dnyx.sthlmmetro.ACTION_TOGGLE_REMINDER" />
                 <action android:name="se.dnyx.sthlmmetro.ACTION_LOCAL_TICK" />
             </intent-filter>
             <meta-data
@@ -95,6 +112,7 @@
                 <action android:name="se.dnyx.sthlmmetro.ACTION_REFRESH_WIDGET" />
                 <action android:name="se.dnyx.sthlmmetro.ACTION_CAT_POKE" />
                 <action android:name="se.dnyx.sthlmmetro.ACTION_SELECT_SLOT" />
+                <action android:name="se.dnyx.sthlmmetro.ACTION_TOGGLE_REMINDER" />
                 <action android:name="se.dnyx.sthlmmetro.ACTION_LOCAL_TICK" />
             </intent-filter>
             <meta-data

@@ -28,7 +28,7 @@ class WidgetLocationActivity : AppCompatActivity() {
             if (ok) {
                 locateAndApply()
             } else {
-                Toast.makeText(this, "Location permission needed for Near Me", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Location permission needed for Near me", Toast.LENGTH_SHORT).show()
                 finish()
             }
         }
@@ -50,8 +50,8 @@ class WidgetLocationActivity : AppCompatActivity() {
         if (LocationHelper.hasLocationPermission(this)) {
             locateAndApply()
         } else {
-            titleView.text = "Allow location for Near Me?"
-            bodyView.text = "T-Radar uses your GPS only when you tap 📍 to show your closest SL stop and walk time."
+            titleView.text = "Allow location for Near me?"
+            bodyView.text = "After this one-time permission, tapping 📍 Near me updates right inside your widget without opening the app."
             spinner.visibility = View.GONE
             primaryBtn.visibility = View.VISIBLE
             primaryBtn.setOnClickListener {
@@ -67,7 +67,7 @@ class WidgetLocationActivity : AppCompatActivity() {
 
     private fun locateAndApply() {
         titleView.text = "Finding closest SL stop…"
-        bodyView.text = "Checking GPS and nearby Stockholm stops."
+        bodyView.text = "Matching GPS to Stockholm stops."
         spinner.visibility = View.VISIBLE
         primaryBtn.visibility = View.GONE
 
@@ -77,7 +77,7 @@ class WidgetLocationActivity : AppCompatActivity() {
                     if (isFinishing) return@runOnUiThread
                     spinner.visibility = View.GONE
                     titleView.text = "GPS unavailable"
-                    bodyView.text = "Turn on Location Services and try tapping 📍 again."
+                    bodyView.text = "Turn on Location Services and try again."
                     primaryBtn.visibility = View.VISIBLE
                     primaryBtn.text = "TRY AGAIN"
                     primaryBtn.setOnClickListener { locateAndApply() }
@@ -100,10 +100,10 @@ class WidgetLocationActivity : AppCompatActivity() {
                     return@execute
                 }
 
-                AnalyticsHelper.logNearMeUsed(this, "widget", nearest.name, nearest.walkMinutes)
+                AnalyticsHelper.logNearMeUsed(this, "widget_prompt", nearest.name, nearest.walkMinutes)
 
                 if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                    WidgetPrefs.setNearbyOverride(
+                    WidgetPrefs.setResolvedNearMe(
                         this,
                         appWidgetId,
                         NearbyOverride(
@@ -118,11 +118,7 @@ class WidgetLocationActivity : AppCompatActivity() {
                 }
 
                 runOnUiThread {
-                    Toast.makeText(
-                        this,
-                        "📍 ${nearest.name} (${nearest.walkMinutes} min walk)",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(this, "📍 ${nearest.name} (${nearest.walkMinutes}m walk)", Toast.LENGTH_SHORT).show()
                     finish()
                 }
             }

@@ -396,7 +396,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
                     android:lineSpacingExtra="4dp"
-                    android:text="1. Long-press Home Screen → Widgets → T-Radar\n2. Drag edges to resize between 4×1, 4×2, or 4×3\n3. Tap 📍 on the widget anytime for Near Me"
+                    android:text="1. Long-press Home Screen → Widgets → T-Radar\n2. Drag edges to resize between 4×1, 4×2, or 4×3\n3. Set any stop above to 📍 Near me for silent GPS\n4. Tap any departure row on the widget to toggle 🔔"
                     android:textColor="@color/text_secondary"
                     android:textSize="12sp" />
             </LinearLayout>

@@ -1,12 +1,8 @@
 package se.dnyx.sthlmmetro
 
-import android.appwidget.AppWidgetManager
-import android.content.ActivityNotFoundException
-import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.provider.AlarmClock
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
@@ -17,7 +13,7 @@ import java.time.format.DateTimeFormatter
 
 class DepartureReminderActivity : AppCompatActivity() {
 
-    private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+    private var siteId = -1
     private var slotIndex = -1
     private var stationName = ""
     private var designation = ""
@@ -45,7 +41,7 @@ class DepartureReminderActivity : AppCompatActivity() {
         AnalyticsHelper.syncCollectionState(this)
         setContentView(R.layout.activity_departure_reminder)
 
-        appWidgetId = intent.getIntExtra(EXTRA_WIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+        siteId = intent.getIntExtra(EXTRA_SITE_ID, -1)
         slotIndex = intent.getIntExtra(EXTRA_SLOT_INDEX, -1)
         stationName = intent.getStringExtra(EXTRA_STATION_NAME).orEmpty()
         designation = intent.getStringExtra(EXTRA_DESIGNATION).orEmpty()
@@ -90,7 +86,7 @@ class DepartureReminderActivity : AppCompatActivity() {
             }
         }
 
-        setTimerBtn.setOnClickListener { onSetTimerClicked() }
+        setTimerBtn.setOnClickListener { onActionClicked() }
         updateCountdownUI()
     }
 
@@ -110,6 +106,12 @@ class DepartureReminderActivity : AppCompatActivity() {
         }
     }
 
+    private fun existingReminder(): ActiveReminder? {
+        if (siteId <= 0) return null
+        val key = ReminderManager.buildKey(siteId, designation, destination, expectedEpochMs)
+        return WidgetPrefs.findReminder(this, key)
+    }
+
     private fun updateCountdownUI() {
         walkValueText.text = "$walkMinutes min"
         val nowMs = System.currentTimeMillis()
@@ -117,56 +119,61 @@ class DepartureReminderActivity : AppCompatActivity() {
 
         if (expectedEpochMs <= 0L || remainingSec <= 0) {
             countdownBanner.text = "Already departed"
-            setTimerBtn.text = "↻ REFRESH"
+            setTimerBtn.text = "CLOSE"
             return
         }
 
         countdownBanner.text = "Departs in ${formatDuration(remainingSec)}"
+        val active = existingReminder()
+        if (active != null) {
+            val ringStr = ReminderManager.formatClock(active.triggerAtMs)
+            setTimerBtn.text = "🔕 CANCEL REMINDER ($ringStr)"
+            return
+        }
+
         val timerSec = remainingSec - walkMinutes * 60
         if (timerSec >= 10) {
             val ringAtStr = Instant.ofEpochMilli(nowMs + timerSec * 1000L)
                 .atZone(ZoneId.systemDefault())
                 .toLocalTime()
                 .format(clockFmt)
-            setTimerBtn.text = "🔔 RING IN ${formatDuration(timerSec)} ($ringAtStr)"
+            setTimerBtn.text = "🔔 CHIME IN ${formatDuration(timerSec)} ($ringAtStr)"
         } else {
             setTimerBtn.text = "🏃 LEAVE NOW (${formatDuration(remainingSec)})"
         }
     }
 
-    private fun onSetTimerClicked() {
-        val nowMs = System.currentTimeMillis()
-        val remainingSec = ((expectedEpochMs - nowMs) / 1000L).toInt()
+    private fun onActionClicked() {
+        val active = existingReminder()
+        if (active != null) {
+            ReminderManager.cancelReminder(this, active.key)
+            MetroWidgetProvider.rerenderAllFromCache(this)
+            Toast.makeText(this, "🔕 Reminder cancelled", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
 
-        if (expectedEpochMs <= 0L || remainingSec <= 0) {
-            if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                MetroWidgetProvider.triggerAsyncRefresh(this, appWidgetId, trigger = "reminder_stale")
+        val res = ReminderManager.scheduleReminder(
+            context = this,
+            siteId = siteId,
+            stationName = stationName,
+            designation = designation,
+            destination = destination,
+            expectedEpochMs = expectedEpochMs,
+            walkMinutes = walkMinutes
+        )
+
+        when (res) {
+            is ReminderToggleResult.Scheduled -> {
+                MetroWidgetProvider.rerenderAllFromCache(this)
+                Toast.makeText(this, "🔔 Chime set for ${res.ringTimeStr}", Toast.LENGTH_SHORT).show()
             }
-            finish()
-            return
+            is ReminderToggleResult.TooClose -> {
+                Toast.makeText(this, "🏃 Leaves in ${formatDuration(res.remainingSeconds)} — head out now!", Toast.LENGTH_LONG).show()
+            }
+            else -> Unit
         }
-
-        val timerSec = remainingSec - walkMinutes * 60
-        if (timerSec < 10) {
-            Toast.makeText(this, "Leaves in ${formatDuration(remainingSec)} — head out now!", Toast.LENGTH_LONG).show()
-            finish()
-            return
-        }
-
-        val label = "Catch $designation → $destination ($stationName)"
-        val intent = Intent(AlarmClock.ACTION_SET_TIMER).apply {
-            putExtra(AlarmClock.EXTRA_LENGTH, timerSec)
-            putExtra(AlarmClock.EXTRA_MESSAGE, label)
-            putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-        }
-        try {
-            startActivity(intent)
-            AnalyticsHelper.logReminderSet(this, stationName, designation, destination, walkMinutes, timerSec)
-            Toast.makeText(this, "Timer set: ${formatDuration(timerSec)}", Toast.LENGTH_SHORT).show()
-            finish()
-        } catch (_: ActivityNotFoundException) {
-            Toast.makeText(this, "No Clock app found.", Toast.LENGTH_SHORT).show()
-        }
+        finish()
     }
 
     private fun formatDuration(totalSec: Int): String {
@@ -176,7 +183,7 @@ class DepartureReminderActivity : AppCompatActivity() {
     }
 
     companion object {
-        const val EXTRA_WIDGET_ID = "widget_id"
+        const val EXTRA_SITE_ID = "site_id"
         const val EXTRA_SLOT_INDEX = "slot_index"
         const val EXTRA_STATION_NAME = "station_name"
         const val EXTRA_DESIGNATION = "designation"
