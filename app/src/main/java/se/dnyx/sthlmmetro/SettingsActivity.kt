@@ -166,6 +166,12 @@ class SettingsActivity : AppCompatActivity() {
             pinWidget(MiniWidgetProvider::class.java, "mini")
         }
 
+        findViewById<View>(R.id.row_send_feedback).setOnClickListener {
+            FeedbackHelper.showFeedbackDialog(this)
+        }
+        findViewById<View>(R.id.row_buy_coffee).setOnClickListener {
+            FeedbackHelper.openCoffeeLink(this, "settings")
+        }
         findViewById<View>(R.id.row_check_updates).setOnClickListener {
             AppUpdater.showUpdateDialog(this)
         }

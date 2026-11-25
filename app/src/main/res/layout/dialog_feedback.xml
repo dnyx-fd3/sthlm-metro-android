@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/dialog_card_bg"
+    android:orientation="vertical"
+    android:padding="18dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Feedback &amp; Ideas"
+            android:textColor="@color/text_primary"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/fb_close"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:gravity="center"
+            android:text="✕"
+            android:textColor="@color/text_secondary"
+            android:textSize="17sp" />
+    </LinearLayout>
+
+    <!-- Category Chips -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/fb_cat_idea"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/chip_active"
+            android:gravity="center"
+            android:text="💡 Idea"
+            android:textColor="@color/bg_dark"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/fb_cat_ui"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/chip_idle"
+            android:gravity="center"
+            android:text="🎨 UI / UX"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/fb_cat_bug"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:background="@drawable/chip_idle"
+            android:gravity="center"
+            android:text="🐛 Bug"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <EditText
+        android:id="@+id/fb_input"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/input_bg"
+        android:gravity="top|start"
+        android:hint="Share a feature idea, UI tweak, or bug…"
+        android:inputType="textMultiLine|textCapSentences"
+        android:maxLines="6"
+        android:minLines="3"
+        android:padding="12dp"
+        android:textColor="@color/text_primary"
+        android:textColorHint="@color/text_secondary"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/fb_submit_github"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:layout_marginTop="14dp"
+        android:background="@drawable/btn_primary_bg"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:text="POST ON GITHUB ↗"
+        android:textColor="@color/bg_dark"
+        android:textSize="12.5sp"
+        android:textStyle="bold" />
+
+    <!-- Subtle Buy Me a Coffee footer inside the popup -->
+    <TextView
+        android:id="@+id/fb_coffee_link"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:layout_marginTop="8dp"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:text="☕ Enjoying T-Radar? Buy me a coffee ↗"
+        android:textColor="@color/text_secondary"
+        android:textSize="11.5sp" />
+
+</LinearLayout>

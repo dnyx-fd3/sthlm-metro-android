@@ -159,4 +159,24 @@ object AnalyticsHelper {
             putString("app_version", BuildConfig.VERSION_NAME)
         }
     }
+
+    fun logFeedbackOpened(context: Context) {
+        log(context, "feedback_opened") {
+            putString("app_version", BuildConfig.VERSION_NAME)
+        }
+    }
+
+    fun logFeedbackSubmitted(context: Context, category: String) {
+        log(context, "feedback_submitted") {
+            putString("category", clip(category, 24))
+            putString("app_version", BuildConfig.VERSION_NAME)
+        }
+    }
+
+    fun logCoffeeClicked(context: Context, source: String) {
+        log(context, "buy_coffee_clicked") {
+            putString("source", clip(source, 24))
+            putString("app_version", BuildConfig.VERSION_NAME)
+        }
+    }
 }

@@ -449,14 +449,14 @@
                     android:textSize="11sp" />
             </LinearLayout>
 
-            <!-- SECTION 4: APP & UPDATES -->
+            <!-- SECTION 4: APP, FEEDBACK & SUPPORT -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="18dp"
                 android:fontFamily="monospace"
                 android:letterSpacing="0.1"
-                android:text="APP"
+                android:text="APP &amp; COMMUNITY"
                 android:textColor="@color/cyan_accent"
                 android:textSize="11sp"
                 android:textStyle="bold" />
@@ -467,16 +467,105 @@
                 android:layout_marginTop="8dp"
                 android:background="@drawable/app_card_bg"
                 android:orientation="vertical"
-                android:padding="14dp">
+                android:padding="12dp">
 
+                <!-- Feedback & Ideas -->
+                <LinearLayout
+                    android:id="@+id/row_send_feedback"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/app_row_bg"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="12dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Feedback &amp; ideas"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="monospace"
+                            android:text="Feature requests, UI/UX &amp; bugs"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="SEND"
+                        android:textColor="@color/cyan_accent"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Subtle Buy Me a Coffee -->
+                <LinearLayout
+                    android:id="@+id/row_buy_coffee"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/app_row_bg"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="12dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Buy me a coffee"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="monospace"
+                            android:text="buymeacoffee.com/dnyx"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="☕ ↗"
+                        android:textColor="@color/amber_warn"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- App Updates -->
                 <LinearLayout
                     android:id="@+id/row_check_updates"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/app_row_bg"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:paddingTop="2dp"
-                    android:paddingBottom="2dp">
+                    android:padding="12dp">
 
                     <LinearLayout
                         android:layout_width="0dp"
