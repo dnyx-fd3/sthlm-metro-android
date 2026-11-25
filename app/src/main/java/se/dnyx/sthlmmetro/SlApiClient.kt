@@ -31,6 +31,24 @@ data class DepartureItem(
     val delayMinutes: Int,
     val cancelled: Boolean,
     val badgeStyle: LineBadgeStyle
+) {
+    fun standOrTrackLabel(): String {
+        val clean = stopPoint.trim()
+        if (clean.isEmpty() || clean.equals("null", ignoreCase = true)) return ""
+        if (clean.length > 5) return clean
+        return when (transportMode) {
+            "BUS" -> "Stand $clean"
+            "METRO", "TRAIN", "TRAM" -> "Track $clean"
+            "SHIP" -> "Quay $clean"
+            else -> "Stand $clean"
+        }
+    }
+}
+
+data class SlDeviation(
+    val header: String,
+    val details: String,
+    val scopeLabel: String
 )
 
 data class StationOption(
@@ -44,6 +62,7 @@ data class StationOption(
 
 object SlApiClient {
     private const val BASE_URL = "https://transport.integration.sl.se/v1"
+    private const val DEVIATIONS_URL = "https://deviations.integration.sl.se/v1/messages"
     private val STOCKHOLM_ZONE = ZoneId.of("Europe/Stockholm")
 
     private val BLUE_TRUNK_BUSES = setOf(
@@ -119,7 +138,12 @@ object SlApiClient {
             val cancelled = state == "CANCELLED"
             val dirCode = obj.optInt("direction_code", 0)
             val stopPointObj = obj.optJSONObject("stop_point")
-            val stopPoint = stopPointObj?.optString("designation", "").orEmpty().trim()
+            val rawStopPoint = if (stopPointObj != null && !stopPointObj.isNull("designation")) {
+                stopPointObj.optString("designation", "").trim()
+            } else {
+                ""
+            }
+            val stopPoint = if (rawStopPoint.equals("null", ignoreCase = true)) "" else rawStopPoint
 
             val effectiveIso = expected.ifEmpty { scheduled }
             val expectedEpochMs = parseStockholmEpochMs(effectiveIso)
@@ -204,6 +228,74 @@ object SlApiClient {
             }
         }
         return out
+    }
+
+    fun fetchSiteDeviations(siteIds: List<Int>): List<SlDeviation> {
+        val cleanIds = siteIds.filter { it > 0 }.distinct().take(4)
+        if (cleanIds.isEmpty()) return emptyList()
+        val siteParams = cleanIds.joinToString("&") { "site=$it" }
+        val raw = httpGet("$DEVIATIONS_URL?future=false&$siteParams", timeoutMs = 8000)
+        val arr = JSONArray(raw)
+        val seenHeaders = HashSet<String>()
+        val results = mutableListOf<SlDeviation>()
+
+        for (i in 0 until arr.length()) {
+            val obj = arr.optJSONObject(i) ?: continue
+            var header = ""
+            var details = ""
+            var scopeAlias = ""
+
+            val variants = obj.optJSONArray("message_variants")
+            if (variants != null && variants.length() > 0) {
+                var chosen: JSONObject? = null
+                for (j in 0 until variants.length()) {
+                    val v = variants.optJSONObject(j) ?: continue
+                    val lang = v.optString("language", "").lowercase()
+                    if (lang.startsWith("en")) {
+                        chosen = v
+                        break
+                    }
+                    if (chosen == null) chosen = v
+                }
+                if (chosen != null) {
+                    if (!chosen.isNull("header")) header = chosen.optString("header", "").trim()
+                    if (!chosen.isNull("details")) details = chosen.optString("details", "").trim()
+                    if (!chosen.isNull("scope_alias")) scopeAlias = chosen.optString("scope_alias", "").trim()
+                }
+            }
+
+            if (header.isEmpty() && !obj.isNull("header")) {
+                header = obj.optString("header", "").trim()
+            }
+            if (details.isEmpty() && !obj.isNull("details")) {
+                details = obj.optString("details", "").trim()
+            }
+            if (header.isEmpty()) continue
+
+            if (scopeAlias.isEmpty()) {
+                val scopeObj = obj.optJSONObject("scope")
+                val linesArr = scopeObj?.optJSONArray("lines")
+                if (linesArr != null && linesArr.length() > 0) {
+                    val lineNames = mutableListOf<String>()
+                    for (k in 0 until minOf(linesArr.length(), 4)) {
+                        val lObj = linesArr.optJSONObject(k) ?: continue
+                        if (!lObj.isNull("designation")) {
+                            val d = lObj.optString("designation", "").trim()
+                            if (d.isNotEmpty()) lineNames.add(d)
+                        }
+                    }
+                    if (lineNames.isNotEmpty()) {
+                        scopeAlias = "Line ${lineNames.joinToString(", ")}"
+                    }
+                }
+            }
+
+            if (seenHeaders.add(header.lowercase())) {
+                results.add(SlDeviation(header = header, details = details, scopeLabel = scopeAlias))
+            }
+            if (results.size >= 5) break
+        }
+        return results
     }
 
     private fun parseStockholmEpochMs(iso: String): Long {

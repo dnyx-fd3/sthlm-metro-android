@@ -25,6 +25,7 @@ class DepartureReminderActivity : AppCompatActivity() {
     private lateinit var countdownBanner: TextView
     private lateinit var walkValueText: TextView
     private lateinit var setTimerBtn: TextView
+    private lateinit var pinLineBtn: TextView
 
     private val handler = Handler(Looper.getMainLooper())
     private val clockFmt = DateTimeFormatter.ofPattern("HH:mm")
@@ -59,13 +60,27 @@ class DepartureReminderActivity : AppCompatActivity() {
         badgeView.text = designation.ifEmpty { "SL" }
         badgeView.setBackgroundResource(MetroWidgetProvider.badgeDrawableFor(badgeStyle))
 
+        val stopPoint = intent.getStringExtra(EXTRA_STOP_POINT).orEmpty()
         findViewById<TextView>(R.id.rem_dest).text = destination.ifEmpty { "Stockholm" }
-        findViewById<TextView>(R.id.rem_meta).text =
-            if (clockTime.isNotEmpty()) "$stationName · $clockTime" else stationName
+        val metaParts = listOf(stationName, stopPoint, clockTime).filter { it.isNotEmpty() }
+        findViewById<TextView>(R.id.rem_meta).text = metaParts.joinToString(" · ")
 
         countdownBanner = findViewById(R.id.rem_countdown_banner)
         walkValueText = findViewById(R.id.rem_walk_value)
         setTimerBtn = findViewById(R.id.rem_btn_set_timer)
+        pinLineBtn = findViewById(R.id.rem_btn_pin_line)
+
+        if (designation.isNotEmpty()) {
+            renderPinLineBtn()
+            pinLineBtn.setOnClickListener {
+                val starred = WidgetPrefs.toggleStarredLine(this, designation)
+                renderPinLineBtn()
+                val msg = if (starred) "★ Line $designation pinned first" else "Unpinned line $designation"
+                Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            pinLineBtn.visibility = View.GONE
+        }
 
         findViewById<View>(R.id.reminder_backdrop).setOnClickListener { finish() }
         findViewById<View>(R.id.rem_close).setOnClickListener { finish() }
@@ -98,6 +113,11 @@ class DepartureReminderActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         handler.removeCallbacks(tickRunnable)
+    }
+
+    private fun renderPinLineBtn() {
+        val starred = designation.trim().uppercase() in WidgetPrefs.loadStarredLines(this)
+        pinLineBtn.text = if (starred) "★ PINNED LINE $designation" else "☆ PIN LINE $designation"
     }
 
     private fun persistWalkDefault() {
@@ -189,6 +209,7 @@ class DepartureReminderActivity : AppCompatActivity() {
         const val EXTRA_DESIGNATION = "designation"
         const val EXTRA_DESTINATION = "destination"
         const val EXTRA_CLOCK_TIME = "clock_time"
+        const val EXTRA_STOP_POINT = "stop_point"
         const val EXTRA_EXPECTED_EPOCH_MS = "expected_epoch_ms"
         const val EXTRA_BADGE_STYLE = "badge_style"
         const val EXTRA_WALK_MINUTES = "walk_minutes"

@@ -19,13 +19,13 @@
 
         <TextView
             android:id="@+id/settings_back"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
             android:background="@drawable/chip_idle"
             android:gravity="center"
             android:text="←"
             android:textColor="@color/text_primary"
-            android:textSize="18sp" />
+            android:textSize="19sp" />
 
         <TextView
             android:id="@+id/settings_title"
@@ -41,15 +41,15 @@
         <TextView
             android:id="@+id/btn_settings_done"
             android:layout_width="wrap_content"
-            android:layout_height="34dp"
+            android:layout_height="40dp"
             android:background="@drawable/btn_primary_bg"
             android:fontFamily="monospace"
             android:gravity="center"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:text="SAVE"
             android:textColor="@color/bg_dark"
-            android:textSize="12sp"
+            android:textSize="12.5sp"
             android:textStyle="bold" />
     </LinearLayout>
 
@@ -225,6 +225,53 @@
                         android:textSize="11sp"
                         android:textStyle="bold" />
                 </LinearLayout>
+
+                <!-- Auto Morning / Afternoon Commute Switch -->
+                <LinearLayout
+                    android:id="@+id/row_auto_ampm"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@drawable/app_row_bg"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:padding="12dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Auto AM / PM stop"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="monospace"
+                            android:text="Stop 1 morning · Stop 2 afternoon"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/chip_auto_ampm"
+                        android:layout_width="54dp"
+                        android:layout_height="34dp"
+                        android:background="@drawable/chip_idle"
+                        android:fontFamily="monospace"
+                        android:gravity="center"
+                        android:text="OFF"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- SECTION 2: WIDGET APPEARANCE -->
@@ -263,39 +310,39 @@
                     <TextView
                         android:id="@+id/theme_auto"
                         android:layout_width="0dp"
-                        android:layout_height="34dp"
-                        android:layout_marginEnd="6dp"
+                        android:layout_height="38dp"
+                        android:layout_marginEnd="8dp"
                         android:layout_weight="1"
                         android:background="@drawable/chip_active"
                         android:gravity="center"
                         android:text="Auto"
                         android:textColor="@color/bg_dark"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
                         android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/theme_dark"
                         android:layout_width="0dp"
-                        android:layout_height="34dp"
-                        android:layout_marginEnd="6dp"
+                        android:layout_height="38dp"
+                        android:layout_marginEnd="8dp"
                         android:layout_weight="1"
                         android:background="@drawable/chip_idle"
                         android:gravity="center"
                         android:text="Dark"
                         android:textColor="@color/text_primary"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
                         android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/theme_light"
                         android:layout_width="0dp"
-                        android:layout_height="34dp"
+                        android:layout_height="38dp"
                         android:layout_weight="1"
                         android:background="@drawable/chip_idle"
                         android:gravity="center"
                         android:text="Light"
                         android:textColor="@color/text_primary"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
@@ -366,7 +413,7 @@
                     <TextView
                         android:id="@+id/btn_pin_board"
                         android:layout_width="0dp"
-                        android:layout_height="38dp"
+                        android:layout_height="44dp"
                         android:layout_marginEnd="8dp"
                         android:layout_weight="1"
                         android:background="@drawable/btn_primary_bg"
@@ -374,20 +421,20 @@
                         android:gravity="center"
                         android:text="+ BOARD"
                         android:textColor="@color/bg_dark"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
                         android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/btn_pin_mini"
                         android:layout_width="0dp"
-                        android:layout_height="38dp"
+                        android:layout_height="44dp"
                         android:layout_weight="1"
                         android:background="@drawable/btn_secondary_bg"
                         android:fontFamily="monospace"
                         android:gravity="center"
                         android:text="+ MINI 4×1"
                         android:textColor="@color/cyan_accent"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 

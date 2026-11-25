@@ -35,6 +35,7 @@ class SettingsActivity : AppCompatActivity() {
     private val slots = arrayOfNulls<StationSlot>(3)
     private var opacityPercent = 85
     private var themeChoice = WidgetTheme.AUTO
+    private var autoAmPm = false
 
     private var allSites: List<StationOption> = SlApiClient.POPULAR_STATIONS
     private val executor = Executors.newSingleThreadExecutor()
@@ -48,6 +49,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var themeChips: Map<WidgetTheme, TextView>
     private lateinit var opacitySeek: SeekBar
     private lateinit var opacityValue: TextView
+    private lateinit var autoAmPmChip: TextView
     private lateinit var versionLabel: TextView
     private lateinit var updateBadge: TextView
 
@@ -97,6 +99,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         opacityPercent = WidgetPrefs.loadSharedOpacity(this)
         themeChoice = WidgetPrefs.loadSharedTheme(this)
+        autoAmPm = WidgetPrefs.isAutoAmPmEnabled(this)
 
         slotNames = listOf(
             findViewById(R.id.set_slot_name_0),
@@ -120,6 +123,7 @@ class SettingsActivity : AppCompatActivity() {
         )
         opacitySeek = findViewById(R.id.set_opacity_seek)
         opacityValue = findViewById(R.id.set_opacity_value)
+        autoAmPmChip = findViewById(R.id.chip_auto_ampm)
         versionLabel = findViewById(R.id.set_version_label)
         updateBadge = findViewById(R.id.set_update_badge)
 
@@ -129,6 +133,11 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.set_slot_0).setOnClickListener { openStationPicker(0) }
         findViewById<View>(R.id.set_slot_1).setOnClickListener { openStationPicker(1) }
         findViewById<View>(R.id.set_slot_2).setOnClickListener { openStationPicker(2) }
+
+        findViewById<View>(R.id.row_auto_ampm).setOnClickListener {
+            autoAmPm = !autoAmPm
+            renderAutoAmPm()
+        }
 
         themeChips.forEach { (theme, chip) ->
             chip.setOnClickListener {
@@ -176,6 +185,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         renderSlots()
+        renderAutoAmPm()
         renderThemeChips()
         renderVersionLabel()
 
@@ -361,7 +371,7 @@ class SettingsActivity : AppCompatActivity() {
                 } else {
                     slotNames[i].text = s.stationName
                     slotNames[i].setTextColor(primary)
-                    slotMetas[i].text = "${s.filter.label} · ${s.walkMinutes}m"
+                    slotMetas[i].text = "${s.filter.label} · ${s.walkMinutes} min walk"
                 }
                 slotActions[i]?.text = "EDIT"
             } else {
@@ -371,6 +381,14 @@ class SettingsActivity : AppCompatActivity() {
                 slotActions[i]?.text = "+"
             }
         }
+    }
+
+    private fun renderAutoAmPm() {
+        val dark = ContextCompat.getColor(this, R.color.bg_dark)
+        val secondary = ContextCompat.getColor(this, R.color.text_secondary)
+        autoAmPmChip.text = if (autoAmPm) "ON" else "OFF"
+        autoAmPmChip.setBackgroundResource(if (autoAmPm) R.drawable.chip_active else R.drawable.chip_idle)
+        autoAmPmChip.setTextColor(if (autoAmPm) dark else secondary)
     }
 
     private fun renderThemeChips() {
@@ -396,6 +414,7 @@ class SettingsActivity : AppCompatActivity() {
             listOf(StationSlot(WidgetPrefs.DEFAULT_SITE_ID, WidgetPrefs.DEFAULT_STATION_NAME, ModeFilter.AUTO, 3))
         }
         WidgetPrefs.saveSharedSettings(this, clean, opacityPercent, themeChoice)
+        WidgetPrefs.setAutoAmPmEnabled(this, autoAmPm)
         AnalyticsHelper.logWidgetConfigured(this, clean, opacityPercent, themeChoice)
         return clean
     }

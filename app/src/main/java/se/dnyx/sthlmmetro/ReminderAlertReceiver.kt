@@ -8,6 +8,14 @@ import androidx.core.content.ContextCompat
 class ReminderAlertReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ACTION_CANCEL_REMINDER) {
+            val key = intent.getStringExtra(EXTRA_KEY).orEmpty()
+            if (key.isNotEmpty()) {
+                ReminderManager.cancelReminder(context, key)
+                MetroWidgetProvider.rerenderAllFromCache(context)
+            }
+            return
+        }
         if (intent.action != ACTION_FIRE_REMINDER) return
 
         val key = intent.getStringExtra(EXTRA_KEY).orEmpty()
@@ -17,7 +25,10 @@ class ReminderAlertReceiver : BroadcastReceiver() {
         val walk = intent.getIntExtra(EXTRA_WALK, 3)
 
         if (key.isNotEmpty()) {
-            WidgetPrefs.removeReminder(context, key)
+            val removed = WidgetPrefs.removeReminder(context, key)
+            if (removed != null) {
+                ReminderManager.dismissCountdownNotification(context, removed.requestCode)
+            }
         }
 
         // Update widgets immediately so the 🔔 tag clears from the departed/reminded row
@@ -40,6 +51,7 @@ class ReminderAlertReceiver : BroadcastReceiver() {
 
     companion object {
         const val ACTION_FIRE_REMINDER = "se.dnyx.sthlmmetro.ACTION_FIRE_REMINDER"
+        const val ACTION_CANCEL_REMINDER = "se.dnyx.sthlmmetro.ACTION_CANCEL_REMINDER"
         const val EXTRA_KEY = "rem_key"
         const val EXTRA_STATION = "rem_station"
         const val EXTRA_LINE = "rem_line"

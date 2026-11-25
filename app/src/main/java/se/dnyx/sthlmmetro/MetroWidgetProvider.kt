@@ -491,7 +491,7 @@ open class MetroWidgetProvider : AppWidgetProvider() {
 
         private fun buildHeaderMeta(cfg: WidgetConfig, syncClock: String): String {
             return if (cfg.isActiveNearMe && cfg.resolvedNearMe != null) {
-                "📍 ${cfg.resolvedNearMe.walkMinutes}m walk · $syncClock"
+                "📍 ${cfg.resolvedNearMe.walkMinutes} min walk · $syncClock"
             } else {
                 syncClock
             }
@@ -620,7 +620,7 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                 views.setViewVisibility(R.id.mini_dep_container, View.GONE)
                 views.setViewVisibility(R.id.mini_status, View.GONE)
                 views.setViewVisibility(R.id.mini_cat_container, View.VISIBLE)
-                views.setTextViewText(R.id.mini_cat_text, "All left… poke ↻")
+                views.setTextViewText(R.id.mini_cat_text, "All left · tap ↻")
                 views.setTextColor(R.id.mini_cat_text, palette.textPrimary)
                 views.setOnClickPendingIntent(R.id.mini_cat_container, catPi)
                 return views
@@ -630,7 +630,7 @@ open class MetroWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_updated_at, subtitle)
             views.setViewVisibility(R.id.widget_status_text, View.GONE)
             views.setViewVisibility(R.id.widget_cat_empty, View.VISIBLE)
-            views.setTextViewText(R.id.widget_cat_caption, "All buses left without you... poke ↻")
+            views.setTextViewText(R.id.widget_cat_caption, "All departed · tap cat or ↻")
             views.setTextColor(R.id.widget_cat_caption, palette.textPrimary)
             views.setOnClickPendingIntent(R.id.widget_cat_empty, catPi)
             for (i in 0 until maxRows) {
@@ -668,10 +668,16 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.mini_dest, d.destination)
                 views.setTextColor(R.id.mini_dest, if (d.cancelled) palette.cancel else palette.textPrimary)
 
+                val standStr = d.standOrTrackLabel()
+                val stopBase = if (standStr.isNotEmpty()) {
+                    "${shortenTabLabel(eff.stationName)} · $standStr"
+                } else {
+                    shortenTabLabel(eff.stationName)
+                }
                 val stopLine = when {
-                    activeRem != null -> "🔔 ${ReminderManager.formatClock(activeRem.triggerAtMs)} · ${shortenTabLabel(eff.stationName)}"
-                    cfg.isActiveNearMe && cfg.resolvedNearMe != null -> "📍 ${shortenTabLabel(eff.stationName)} · ${cfg.resolvedNearMe.walkMinutes}m"
-                    else -> shortenTabLabel(eff.stationName)
+                    activeRem != null -> "🔔 ${ReminderManager.formatClock(activeRem.triggerAtMs)} · $stopBase"
+                    cfg.isActiveNearMe && cfg.resolvedNearMe != null -> "📍 $stopBase · ${cfg.resolvedNearMe.walkMinutes} min"
+                    else -> stopBase
                 }
                 views.setTextViewText(R.id.mini_stop, stopLine)
                 views.setTextColor(R.id.mini_stop, if (activeRem != null) palette.accent else palette.textSecondary)
@@ -722,15 +728,19 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                     views.setTextViewText(DEST_IDS[i], d.destination)
                     views.setTextColor(DEST_IDS[i], if (d.cancelled) palette.cancel else palette.textPrimary)
 
-                    // Show 🔔 HH:mm when reminded, or delay/cancel status; otherwise stay ultra-minimal!
+                    // Show Stand/Track, 🔔 HH:mm when reminded, or delay/cancel status
                     val subParts = mutableListOf<String>()
+                    val standStr = d.standOrTrackLabel()
+                    if (standStr.isNotEmpty()) {
+                        subParts.add(standStr)
+                    }
                     if (activeRem != null) {
                         subParts.add("🔔 ${ReminderManager.formatClock(activeRem.triggerAtMs)}")
                     }
                     if (d.cancelled) {
                         subParts.add("Cancelled")
                     } else if (d.delayMinutes > 0) {
-                        subParts.add("+${d.delayMinutes}m late")
+                        subParts.add("+${d.delayMinutes} min")
                     }
 
                     if (subParts.isNotEmpty()) {
@@ -741,7 +751,8 @@ open class MetroWidgetProvider : AppWidgetProvider() {
                             when {
                                 d.cancelled -> palette.cancel
                                 activeRem != null -> palette.accent
-                                else -> palette.warn
+                                d.delayMinutes > 0 -> palette.warn
+                                else -> palette.textSecondary
                             }
                         )
                     } else {

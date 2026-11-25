@@ -118,7 +118,8 @@ class WidgetLocationActivity : AppCompatActivity() {
                 }
 
                 runOnUiThread {
-                    Toast.makeText(this, "📍 ${nearest.name} (${nearest.walkMinutes}m walk)", Toast.LENGTH_SHORT).show()
+                    val distStr = LocationHelper.formatDistance(nearest.distanceMeters)
+                    Toast.makeText(this, "📍 ${nearest.name} ($distStr · ${nearest.walkMinutes} min walk)", Toast.LENGTH_SHORT).show()
                     finish()
                 }
             }

@@ -3,6 +3,7 @@ package se.dnyx.sthlmmetro
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.LocalTime
 
 enum class ModeFilter(val code: String, val label: String) {
     AUTO("AUTO", "Auto"),
@@ -108,6 +109,8 @@ object WidgetPrefs {
     private const val KEY_NEARBY_OVERRIDE = "nearby_override_"
     private const val KEY_ACTIVE_REMINDERS = "active_reminders_json"
     private const val KEY_NOTIF_PROMPTED = "notif_perm_prompted_v21"
+    private const val KEY_AUTO_AM_PM = "auto_am_pm_enabled"
+    private const val KEY_STARRED_LINES = "starred_lines_csv"
 
     private const val LEGACY_SLOTS_JSON = "slots_json_"
     private const val LEGACY_OPACITY = "opacity_pct_"
@@ -134,6 +137,46 @@ object WidgetPrefs {
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_NOTIF_PROMPTED, true)
             .apply()
+    }
+
+    fun isAutoAmPmEnabled(context: Context): Boolean {
+        return context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_AUTO_AM_PM, false)
+    }
+
+    fun setAutoAmPmEnabled(context: Context, enabled: Boolean) {
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_AUTO_AM_PM, enabled)
+            .apply()
+    }
+
+    fun preferredAmPmIndex(slotCount: Int): Int {
+        if (slotCount < 2) return 0
+        return if (LocalTime.now().hour < 12) 0 else 1
+    }
+
+    fun loadStarredLines(context: Context): Set<String> {
+        val raw = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_STARRED_LINES, "").orEmpty()
+        if (raw.isBlank()) return emptySet()
+        return raw.split(",").map { it.trim().uppercase() }.filter { it.isNotEmpty() }.toSet()
+    }
+
+    fun toggleStarredLine(context: Context, designation: String): Boolean {
+        val clean = designation.trim().uppercase()
+        if (clean.isEmpty()) return false
+        val current = loadStarredLines(context).toMutableSet()
+        val nowStarred = if (clean in current) {
+            current.remove(clean)
+            false
+        } else {
+            current.add(clean)
+            true
+        }
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putString(KEY_STARRED_LINES, current.joinToString(","))
+            .apply()
+        return nowStarred
     }
 
     fun saveSharedSettings(
@@ -228,7 +271,8 @@ object WidgetPrefs {
     fun load(context: Context, appWidgetId: Int): WidgetConfig {
         val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val slots = loadSharedSlots(context)
-        val active = prefs.getInt(KEY_ACTIVE_SLOT + appWidgetId, 0).coerceIn(0, slots.lastIndex)
+        val defaultIdx = if (isAutoAmPmEnabled(context)) preferredAmPmIndex(slots.size) else 0
+        val active = prefs.getInt(KEY_ACTIVE_SLOT + appWidgetId, defaultIdx).coerceIn(0, slots.lastIndex)
         val opacity = loadSharedOpacity(context)
         val theme = loadSharedTheme(context)
         val near = parseNearby(prefs.getString(KEY_NEARBY_OVERRIDE + appWidgetId, null))

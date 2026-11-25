@@ -49,76 +49,76 @@
     <TextView
         android:id="@+id/pk_use_near_me"
         android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:layout_marginTop="10dp"
+        android:layout_height="44dp"
+        android:layout_marginTop="12dp"
         android:background="@drawable/chip_radar_bg"
         android:fontFamily="monospace"
         android:gravity="center"
         android:text="📍 Near me (GPS)"
         android:textColor="@color/cyan_accent"
-        android:textSize="12sp"
+        android:textSize="12.5sp"
         android:textStyle="bold" />
 
     <!-- Mode Filter Chips -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="12dp"
         android:orientation="horizontal">
 
         <TextView
             android:id="@+id/pk_auto"
             android:layout_width="wrap_content"
-            android:layout_height="28dp"
-            android:layout_marginEnd="6dp"
+            android:layout_height="34dp"
+            android:layout_marginEnd="8dp"
             android:background="@drawable/chip_active"
             android:gravity="center"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
+            android:paddingStart="13dp"
+            android:paddingEnd="13dp"
             android:text="Auto"
             android:textColor="@color/bg_dark"
-            android:textSize="11sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/pk_bus"
             android:layout_width="wrap_content"
-            android:layout_height="28dp"
-            android:layout_marginEnd="6dp"
+            android:layout_height="34dp"
+            android:layout_marginEnd="8dp"
             android:background="@drawable/chip_idle"
             android:gravity="center"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
+            android:paddingStart="13dp"
+            android:paddingEnd="13dp"
             android:text="Bus"
             android:textColor="@color/text_primary"
-            android:textSize="11sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/pk_pendel"
             android:layout_width="wrap_content"
-            android:layout_height="28dp"
-            android:layout_marginEnd="6dp"
+            android:layout_height="34dp"
+            android:layout_marginEnd="8dp"
             android:background="@drawable/chip_idle"
             android:gravity="center"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
+            android:paddingStart="13dp"
+            android:paddingEnd="13dp"
             android:text="Pendel"
             android:textColor="@color/text_primary"
-            android:textSize="11sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/pk_all"
             android:layout_width="wrap_content"
-            android:layout_height="28dp"
+            android:layout_height="34dp"
             android:background="@drawable/chip_idle"
             android:gravity="center"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
+            android:paddingStart="13dp"
+            android:paddingEnd="13dp"
             android:text="All"
             android:textColor="@color/text_primary"
-            android:textSize="11sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
     </LinearLayout>
 
@@ -126,72 +126,72 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="12dp"
         android:background="@drawable/app_row_bg"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="12dp"
-        android:paddingTop="6dp"
-        android:paddingEnd="8dp"
-        android:paddingBottom="6dp">
+        android:paddingStart="14dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="8dp">
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Walk"
+            android:text="Walk time"
             android:textColor="@color/text_secondary"
-            android:textSize="12sp" />
+            android:textSize="13sp" />
 
         <TextView
             android:id="@+id/pk_walk_minus"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
             android:background="@drawable/chip_idle"
             android:gravity="center"
             android:text="−"
             android:textColor="@color/text_primary"
-            android:textSize="16sp"
+            android:textSize="18sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/pk_walk_val"
-            android:layout_width="48dp"
+            android:layout_width="56dp"
             android:layout_height="wrap_content"
             android:fontFamily="monospace"
             android:gravity="center"
             android:text="3 min"
             android:textColor="@color/cyan_accent"
-            android:textSize="12sp"
+            android:textSize="13sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/pk_walk_plus"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
+            android:layout_width="38dp"
+            android:layout_height="38dp"
             android:background="@drawable/chip_idle"
             android:gravity="center"
             android:text="+"
             android:textColor="@color/text_primary"
-            android:textSize="16sp"
+            android:textSize="18sp"
             android:textStyle="bold" />
     </LinearLayout>
 
     <EditText
         android:id="@+id/picker_search"
         android:layout_width="match_parent"
-        android:layout_height="42dp"
-        android:layout_marginTop="10dp"
+        android:layout_height="46dp"
+        android:layout_marginTop="12dp"
         android:background="@drawable/input_bg"
         android:hint="Search stops…"
         android:imeOptions="actionSearch"
         android:inputType="text"
         android:maxLines="1"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
         android:textColor="@color/text_primary"
         android:textColorHint="@color/text_secondary"
-        android:textSize="13sp" />
+        android:textSize="14sp" />
 
     <ListView
         android:id="@+id/picker_list"

@@ -32,22 +32,22 @@
         <TextView
             android:id="@+id/btn_open_3d_web"
             android:layout_width="wrap_content"
-            android:layout_height="34dp"
-            android:layout_marginEnd="8dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="10dp"
             android:background="@drawable/chip_radar_bg"
             android:fontFamily="monospace"
             android:gravity="center"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
             android:text="◎ 3D"
             android:textColor="@color/cyan_accent"
-            android:textSize="12sp"
+            android:textSize="12.5sp"
             android:textStyle="bold" />
 
         <FrameLayout
             android:id="@+id/btn_open_settings"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
             android:background="@drawable/chip_idle">
 
             <TextView
@@ -56,15 +56,15 @@
                 android:gravity="center"
                 android:text="⚙"
                 android:textColor="@color/text_primary"
-                android:textSize="17sp" />
+                android:textSize="18sp" />
 
             <View
                 android:id="@+id/settings_update_dot"
                 android:layout_width="8dp"
                 android:layout_height="8dp"
                 android:layout_gravity="top|end"
-                android:layout_marginTop="5dp"
-                android:layout_marginEnd="5dp"
+                android:layout_marginTop="6dp"
+                android:layout_marginEnd="6dp"
                 android:background="@drawable/dot_cyan"
                 android:visibility="gone" />
         </FrameLayout>
@@ -74,7 +74,7 @@
     <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="12dp"
         android:scrollbars="none">
 
         <LinearLayout
@@ -85,81 +85,81 @@
             <TextView
                 android:id="@+id/pill_near_me"
                 android:layout_width="wrap_content"
-                android:layout_height="32dp"
-                android:layout_marginEnd="7dp"
+                android:layout_height="40dp"
+                android:layout_marginEnd="8dp"
                 android:background="@drawable/chip_idle"
                 android:gravity="center"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
+                android:paddingStart="15dp"
+                android:paddingEnd="15dp"
                 android:text="📍 Near me"
                 android:textColor="@color/text_primary"
-                android:textSize="12sp"
+                android:textSize="13sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/pill_stop_0"
                 android:layout_width="wrap_content"
-                android:layout_height="32dp"
-                android:layout_marginEnd="7dp"
+                android:layout_height="40dp"
+                android:layout_marginEnd="8dp"
                 android:background="@drawable/chip_active"
                 android:ellipsize="end"
                 android:gravity="center"
                 android:maxLines="1"
-                android:maxWidth="140dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
+                android:maxWidth="156dp"
+                android:paddingStart="15dp"
+                android:paddingEnd="15dp"
                 android:text="T-Centralen"
                 android:textColor="@color/bg_dark"
-                android:textSize="12sp"
+                android:textSize="13sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/pill_stop_1"
                 android:layout_width="wrap_content"
-                android:layout_height="32dp"
-                android:layout_marginEnd="7dp"
+                android:layout_height="40dp"
+                android:layout_marginEnd="8dp"
                 android:background="@drawable/chip_idle"
                 android:ellipsize="end"
                 android:gravity="center"
                 android:maxLines="1"
-                android:maxWidth="140dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
+                android:maxWidth="156dp"
+                android:paddingStart="15dp"
+                android:paddingEnd="15dp"
                 android:text="Stop 2"
                 android:textColor="@color/text_primary"
-                android:textSize="12sp"
+                android:textSize="13sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
 
             <TextView
                 android:id="@+id/pill_stop_2"
                 android:layout_width="wrap_content"
-                android:layout_height="32dp"
-                android:layout_marginEnd="7dp"
+                android:layout_height="40dp"
+                android:layout_marginEnd="8dp"
                 android:background="@drawable/chip_idle"
                 android:ellipsize="end"
                 android:gravity="center"
                 android:maxLines="1"
-                android:maxWidth="140dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
+                android:maxWidth="156dp"
+                android:paddingStart="15dp"
+                android:paddingEnd="15dp"
                 android:text="Stop 3"
                 android:textColor="@color/text_primary"
-                android:textSize="12sp"
+                android:textSize="13sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
 
             <TextView
                 android:id="@+id/pill_add_stop"
                 android:layout_width="wrap_content"
-                android:layout_height="32dp"
+                android:layout_height="40dp"
                 android:background="@drawable/chip_idle"
                 android:gravity="center"
-                android:paddingStart="11dp"
-                android:paddingEnd="11dp"
+                android:paddingStart="15dp"
+                android:paddingEnd="15dp"
                 android:text="+"
                 android:textColor="@color/cyan_accent"
-                android:textSize="14sp"
+                android:textSize="16sp"
                 android:textStyle="bold" />
         </LinearLayout>
     </HorizontalScrollView>
@@ -169,7 +169,7 @@
         android:id="@+id/nearby_strip_scroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="10dp"
         android:scrollbars="none"
         android:visibility="gone">
 
@@ -184,7 +184,7 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="12dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
@@ -199,32 +199,33 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
+                android:letterSpacing="0.01"
                 android:maxLines="1"
                 android:text="T-Centralen"
                 android:textColor="@color/text_primary"
-                android:textSize="20sp"
+                android:textSize="21sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/board_station_meta"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="1dp"
+                android:layout_marginTop="3dp"
                 android:fontFamily="monospace"
                 android:text="SL Live"
                 android:textColor="@color/text_secondary"
-                android:textSize="11sp" />
+                android:textSize="12sp" />
         </LinearLayout>
 
         <TextView
             android:id="@+id/btn_board_refresh"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
             android:background="@drawable/chip_idle"
             android:gravity="center"
             android:text="↻"
             android:textColor="@color/cyan_accent"
-            android:textSize="18sp"
+            android:textSize="20sp"
             android:textStyle="bold" />
     </LinearLayout>
 
@@ -232,63 +233,63 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="12dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
         <TextView
             android:id="@+id/filter_all"
             android:layout_width="wrap_content"
-            android:layout_height="28dp"
-            android:layout_marginEnd="6dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="8dp"
             android:background="@drawable/chip_active"
             android:gravity="center"
-            android:paddingStart="11dp"
-            android:paddingEnd="11dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
             android:text="All"
             android:textColor="@color/bg_dark"
-            android:textSize="11sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/filter_metro"
             android:layout_width="wrap_content"
-            android:layout_height="28dp"
-            android:layout_marginEnd="6dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="8dp"
             android:background="@drawable/chip_idle"
             android:gravity="center"
-            android:paddingStart="11dp"
-            android:paddingEnd="11dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
             android:text="Metro"
             android:textColor="@color/text_primary"
-            android:textSize="11sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/filter_bus"
             android:layout_width="wrap_content"
-            android:layout_height="28dp"
-            android:layout_marginEnd="6dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="8dp"
             android:background="@drawable/chip_idle"
             android:gravity="center"
-            android:paddingStart="11dp"
-            android:paddingEnd="11dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
             android:text="Bus"
             android:textColor="@color/text_primary"
-            android:textSize="11sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/filter_pendel"
             android:layout_width="wrap_content"
-            android:layout_height="28dp"
+            android:layout_height="36dp"
             android:background="@drawable/chip_idle"
             android:gravity="center"
-            android:paddingStart="11dp"
-            android:paddingEnd="11dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
             android:text="Pendel"
             android:textColor="@color/text_primary"
-            android:textSize="11sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <View
@@ -299,17 +300,36 @@
         <TextView
             android:id="@+id/btn_dir_toggle"
             android:layout_width="wrap_content"
-            android:layout_height="28dp"
+            android:layout_height="36dp"
             android:background="@drawable/chip_idle"
             android:fontFamily="monospace"
             android:gravity="center"
-            android:paddingStart="10dp"
-            android:paddingEnd="10dp"
+            android:paddingStart="13dp"
+            android:paddingEnd="13dp"
             android:text="⇅"
             android:textColor="@color/text_secondary"
-            android:textSize="12sp"
+            android:textSize="13sp"
             android:textStyle="bold" />
     </LinearLayout>
+
+    <!-- Compact 1-Line Live SL Disruption Alert Banner (hidden when clear) -->
+    <TextView
+        android:id="@+id/deviation_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/deviation_banner_bg"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:paddingStart="12dp"
+        android:paddingTop="9dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="9dp"
+        android:text="⚠️ Traffic alert"
+        android:textColor="@color/amber_warn"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
 
     <!-- Status / Empty State / Neon Cat inside Board -->
     <LinearLayout
@@ -364,10 +384,10 @@
         android:id="@+id/board_list_view"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="12dp"
         android:layout_weight="1"
         android:divider="@android:color/transparent"
-        android:dividerHeight="6dp"
+        android:dividerHeight="8dp"
         android:scrollbars="none" />
 
 </LinearLayout>

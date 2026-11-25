@@ -9,6 +9,7 @@ import android.location.LocationManager
 import android.os.Build
 import android.os.CancellationSignal
 import androidx.core.content.ContextCompat
+import java.util.Locale
 import java.util.concurrent.Executors
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -107,6 +108,14 @@ object LocationHelper {
         return best
     }
 
+    fun formatDistance(meters: Int): String {
+        return if (meters < 1000) {
+            "$meters m"
+        } else {
+            String.format(Locale.US, "%.1f km", meters / 1000.0)
+        }
+    }
+
     fun findNearestStops(lat: Double, lon: Double, sites: List<StationOption>, limit: Int = 4): List<NearbyStop> {
         val candidates = sites.filter { !it.lat.isNaN() && !it.lon.isNaN() }
         val source = candidates.ifEmpty { SlApiClient.POPULAR_STATIONS }
@@ -114,16 +123,16 @@ object LocationHelper {
         return source.map { s ->
             val dist = haversineMeters(lat, lon, s.lat, s.lon)
             // Account for street detours (1.25x) at ~80 m/min walking pace
-            val walkMin = ((dist * 1.25) / 80.0).roundToInt().coerceIn(1, 30)
+            val walkMin = ((dist * 1.25) / 80.0).roundToInt().coerceIn(1, 99)
             val mergedModes = if (s.modes.isNotEmpty()) s.modes else (popularModes[s.siteId] ?: emptySet())
             NearbyStop(s.siteId, s.name, dist.roundToInt(), walkMin, mergedModes)
         }.sortedBy { it.distanceMeters }.take(limit)
     }
 
     /**
-     * Picks nearby stops across different transit modes (e.g. nearest bus stops plus
-     * nearest Metro/Train/Tram within walking range) so local bus stops don't crowd out
-     * a nearby rail hub like Universitetet when in Lappis.
+     * Picks walkable nearby stops ordered strictly nearest-first while ensuring nearby Metro/Rail
+     * hubs (like Universitetet from Lappis) aren't crowded out by local bus stops, and avoiding
+     * cross-water ferry piers or distant 3 km+ stations.
      */
     fun findNearestDiverseStops(lat: Double, lon: Double, sites: List<StationOption>, limit: Int = 4): List<NearbyStop> {
         val allSorted = findNearestStops(lat, lon, sites, limit = Int.MAX_VALUE)
@@ -136,27 +145,29 @@ object LocationHelper {
             }
         }
 
-        // 1. Always include the single closest stop
-        addStop(allSorted.first())
+        // 1. Always include the 2 closest stops overall so immediate neighborhood stops come first
+        addStop(allSorted.getOrNull(0))
+        allSorted.getOrNull(1)?.takeIf { it.distanceMeters <= 1200 }?.let { addStop(it) }
 
-        // 2. Include nearest Metro within 3.5 km
-        val nearestMetro = allSorted.firstOrNull { "METRO" in it.modes && it.distanceMeters <= 3500 }
-        addStop(nearestMetro)
+        // 2. Include nearest walkable Metro within 2.0 km (~25 min walk)
+        addStop(allSorted.firstOrNull { "METRO" in it.modes && it.distanceMeters <= 2000 })
 
-        // 3. Include nearest Train (Pendel / Roslagsbanan) within 3.5 km if not already covered
+        // 3. Include nearest Train (Pendel / Roslagsbanan) within 1.8 km if not already covered
         if (chosen.values.none { "TRAIN" in it.modes }) {
-            addStop(allSorted.firstOrNull { "TRAIN" in it.modes && it.distanceMeters <= 3500 })
+            addStop(allSorted.firstOrNull { "TRAIN" in it.modes && it.distanceMeters <= 1800 })
         }
 
-        // 4. Include nearest Tram or Ferry within 1.8 km if not already covered
-        if (chosen.values.none { "TRAM" in it.modes || "SHIP" in it.modes }) {
-            addStop(allSorted.firstOrNull { ("TRAM" in it.modes || "SHIP" in it.modes) && it.distanceMeters <= 1800 })
+        // 4. Include nearest Tram within 1.0 km if not already covered (skip SHIP to avoid cross-bay piers)
+        if (chosen.values.none { "TRAM" in it.modes }) {
+            addStop(allSorted.firstOrNull { "TRAM" in it.modes && it.distanceMeters <= 1000 })
         }
 
-        // 5. Fill remaining slots with the closest local stops (e.g. Lektorsstigen + Stora Lappis)
+        // 5. Fill remaining slots with next closest walkable stops
         for (stop in allSorted) {
             if (chosen.size >= limit) break
-            addStop(stop)
+            if (stop.distanceMeters <= 2000 || chosen.isEmpty()) {
+                addStop(stop)
+            }
         }
 
         return chosen.values.sortedBy { it.distanceMeters }
