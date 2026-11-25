@@ -2,6 +2,7 @@ package se.dnyx.sthlmmetro
 
 import android.app.Activity
 import android.app.Dialog
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -27,11 +28,9 @@ import java.util.concurrent.Executors
 
 data class ReleaseInfo(
     val tagName: String,
-    val title: String,
     val htmlUrl: String,
     val apkDownloadUrl: String?,
     val apkSizeBytes: Long,
-    val publishedAtMs: Long,
     val isNewer: Boolean
 )
 
@@ -44,6 +43,19 @@ object AppUpdater {
     var cachedRelease: ReleaseInfo? = null
         private set
 
+    fun cleanupOldApks(context: Context) {
+        executor.execute {
+            try {
+                val dir = File(context.applicationContext.cacheDir, "updates")
+                if (dir.exists()) {
+                    dir.listFiles()?.forEach { it.delete() }
+                }
+            } catch (_: Exception) {
+                // Ignore
+            }
+        }
+    }
+
     fun checkInBackground(onResult: (ReleaseInfo?) -> Unit) {
         executor.execute {
             val info = fetchLatestReleaseBlocking()
@@ -52,9 +64,9 @@ object AppUpdater {
         }
     }
 
-    fun showUpdateDialog(activity: Activity, source: String = "main") {
+    fun showUpdateDialog(activity: Activity) {
         if (activity.isFinishing || activity.isDestroyed) return
-        AnalyticsHelper.logUpdateDialogOpened(activity, source)
+        AnalyticsHelper.logUpdateChecked(activity)
 
         val dialog = Dialog(activity)
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -85,10 +97,10 @@ object AppUpdater {
 
             if (info == null) {
                 titleView.text = "Couldn't check releases"
-                bodyView.text = "Installed: T-Radar v${BuildConfig.VERSION_NAME}\nCheck your connection or open GitHub Releases below."
+                bodyView.text = "Installed: T-Radar v${BuildConfig.VERSION_NAME}"
                 primaryBtn.text = "↻ TRY AGAIN"
                 primaryBtn.setOnClickListener {
-                    titleView.text = "Checking GitHub Releases…"
+                    titleView.text = "Checking…"
                     progressBar.isIndeterminate = true
                     progressBar.visibility = View.VISIBLE
                     primaryBtn.visibility = View.GONE
@@ -105,41 +117,19 @@ object AppUpdater {
 
             if (info.isNewer && !info.apkDownloadUrl.isNullOrEmpty()) {
                 titleView.text = "Update ready (${info.tagName})"
-                bodyView.text = "Installed: v${BuildConfig.VERSION_NAME}\nLatest build: ${info.tagName} ($sizeMb)"
+                bodyView.text = "Installed: v${BuildConfig.VERSION_NAME}\nLatest: ${info.tagName} ($sizeMb)"
                 primaryBtn.text = "⬇ DOWNLOAD & INSTALL"
                 primaryBtn.setOnClickListener {
-                    AnalyticsHelper.logUpdateDownloadStarted(activity, info.tagName)
-                    startApkDownloadAndInstall(
-                        activity = activity,
-                        dialog = dialog,
-                        apkUrl = info.apkDownloadUrl,
-                        titleView = titleView,
-                        bodyView = bodyView,
-                        progressBar = progressBar,
-                        primaryBtn = primaryBtn
-                    )
+                    startDownload(activity, dialog, info.apkDownloadUrl, titleView, bodyView, progressBar, primaryBtn)
                 }
             } else {
                 titleView.text = "You're up to date!"
-                bodyView.text = "Installed: T-Radar v${BuildConfig.VERSION_NAME}\nLatest GitHub build: ${info.tagName}"
-                primaryBtn.text = if (!info.apkDownloadUrl.isNullOrEmpty()) {
-                    "↻ RE-DOWNLOAD LATEST ($sizeMb)"
-                } else {
-                    "✓ CLOSE"
-                }
+                bodyView.text = "Installed: v${BuildConfig.VERSION_NAME}\nLatest build: ${info.tagName}"
+                primaryBtn.text = if (!info.apkDownloadUrl.isNullOrEmpty()) "↻ RE-DOWNLOAD ($sizeMb)" else "CLOSE"
                 primaryBtn.setOnClickListener {
                     val url = info.apkDownloadUrl
                     if (!url.isNullOrEmpty()) {
-                        AnalyticsHelper.logUpdateDownloadStarted(activity, info.tagName)
-                        startApkDownloadAndInstall(
-                            activity = activity,
-                            dialog = dialog,
-                            apkUrl = url,
-                            titleView = titleView,
-                            bodyView = bodyView,
-                            progressBar = progressBar,
-                            primaryBtn = primaryBtn
-                        )
+                        startDownload(activity, dialog, url, titleView, bodyView, progressBar, primaryBtn)
                     } else {
                         dialog.dismiss()
                     }
@@ -148,9 +138,8 @@ object AppUpdater {
         }
 
         dialog.show()
-
         titleView.text = "Checking GitHub Releases…"
-        bodyView.text = "Installed: T-Radar v${BuildConfig.VERSION_NAME}"
+        bodyView.text = "Installed: v${BuildConfig.VERSION_NAME}"
         progressBar.isIndeterminate = true
         progressBar.visibility = View.VISIBLE
         primaryBtn.visibility = View.GONE
@@ -160,7 +149,7 @@ object AppUpdater {
         }
     }
 
-    private fun startApkDownloadAndInstall(
+    private fun startDownload(
         activity: Activity,
         dialog: Dialog,
         apkUrl: String,
@@ -170,17 +159,11 @@ object AppUpdater {
         primaryBtn: TextView
     ) {
         if (!activity.packageManager.canRequestPackageInstalls()) {
-            Toast.makeText(
-                activity,
-                "Allow T-Radar to install updates, then tap Download again.",
-                Toast.LENGTH_LONG
-            ).show()
+            Toast.makeText(activity, "Allow T-Radar to install updates, then tap Download again.", Toast.LENGTH_LONG).show()
             try {
-                val permIntent = Intent(
-                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                    Uri.parse("package:${activity.packageName}")
+                activity.startActivity(
+                    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}"))
                 )
-                activity.startActivity(permIntent)
             } catch (_: Exception) {
                 openUrl(activity, apkUrl)
             }
@@ -192,8 +175,8 @@ object AppUpdater {
         progressBar.isIndeterminate = false
         progressBar.max = 100
         progressBar.progress = 0
-        titleView.text = "Downloading T-Radar…"
-        bodyView.text = "0% — fetching latest APK from GitHub"
+        titleView.text = "Downloading…"
+        bodyView.text = "0%"
 
         executor.execute {
             try {
@@ -208,12 +191,10 @@ object AppUpdater {
                     setRequestProperty("User-Agent", "TRadarAndroid/${BuildConfig.VERSION_NAME}")
                 }
                 try {
-                    val code = conn.responseCode
-                    if (code !in 200..299) throw IllegalStateException("HTTP $code")
+                    if (conn.responseCode !in 200..299) throw IllegalStateException("HTTP ${conn.responseCode}")
                     val total = conn.contentLengthLong
                     var downloaded = 0L
                     var lastPct = -1
-
                     conn.inputStream.use { input ->
                         FileOutputStream(outFile).use { output ->
                             val buf = ByteArray(16 * 1024)
@@ -229,7 +210,7 @@ object AppUpdater {
                                         activity.runOnUiThread {
                                             if (dialog.isShowing) {
                                                 progressBar.progress = pct
-                                                bodyView.text = "$pct% downloaded…"
+                                                bodyView.text = "$pct%"
                                             }
                                         }
                                     }
@@ -251,8 +232,8 @@ object AppUpdater {
                     progressBar.visibility = View.GONE
                     primaryBtn.visibility = View.VISIBLE
                     titleView.text = "Download failed"
-                    bodyView.text = "Opening Releases in browser works as a fallback."
-                    primaryBtn.text = "↻ RETRY DOWNLOAD"
+                    bodyView.text = "Try opening GitHub Releases below."
+                    primaryBtn.text = "↻ RETRY"
                 }
             }
         }
@@ -260,19 +241,14 @@ object AppUpdater {
 
     private fun launchInstaller(activity: Activity, apkFile: File) {
         try {
-            val contentUri = FileProvider.getUriForFile(
-                activity,
-                "${activity.packageName}.fileprovider",
-                apkFile
-            )
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(contentUri, "application/vnd.android.package-archive")
+            val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", apkFile)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            activity.startActivity(installIntent)
+            activity.startActivity(intent)
         } catch (_: Exception) {
-            Toast.makeText(activity, "Couldn't open installer — try GitHub Releases.", Toast.LENGTH_LONG).show()
             openUrl(activity, releasesPageUrl)
         }
     }
@@ -291,40 +267,32 @@ object AppUpdater {
                 val raw = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { it.readText() }
                 val json = JSONObject(raw)
                 val tag = json.optString("tag_name", "latest")
-                val name = json.optString("name", tag)
                 val htmlUrl = json.optString("html_url", releasesPageUrl)
-                val publishedStr = json.optString("published_at", "")
-                val publishedMs = try {
-                    if (publishedStr.isNotEmpty()) Instant.parse(publishedStr).toEpochMilli() else 0L
+                val pubStr = json.optString("published_at", "")
+                val pubMs = try {
+                    if (pubStr.isNotEmpty()) Instant.parse(pubStr).toEpochMilli() else 0L
                 } catch (_: Exception) {
                     0L
                 }
-
                 var apkUrl: String? = null
                 var apkSize = 0L
                 val assets = json.optJSONArray("assets")
                 if (assets != null) {
                     for (i in 0 until assets.length()) {
                         val a = assets.optJSONObject(i) ?: continue
-                        val fileName = a.optString("name", "")
-                        if (fileName.endsWith(".apk", ignoreCase = true)) {
+                        if (a.optString("name", "").endsWith(".apk", ignoreCase = true)) {
                             apkUrl = a.optString("browser_download_url", "").ifEmpty { null }
                             apkSize = a.optLong("size", 0L)
                             break
                         }
                     }
                 }
-
-                val isNewer = publishedMs > (BuildConfig.BUILD_TIME_MS + 5L * 60L * 1000L)
-
                 ReleaseInfo(
                     tagName = tag,
-                    title = name,
                     htmlUrl = htmlUrl,
                     apkDownloadUrl = apkUrl,
                     apkSizeBytes = apkSize,
-                    publishedAtMs = publishedMs,
-                    isNewer = isNewer
+                    isNewer = pubMs > (BuildConfig.BUILD_TIME_MS + 5L * 60L * 1000L)
                 )
             } finally {
                 conn.disconnect()

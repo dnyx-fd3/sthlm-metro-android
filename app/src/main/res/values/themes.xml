@@ -1,16 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.SthlmMetro" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <style name="Theme.TRadar" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="colorPrimary">@color/cyan_accent</item>
-        <item name="colorPrimaryVariant">@color/card_bg</item>
-        <item name="colorOnPrimary">@color/bg_dark</item>
+        <item name="colorPrimaryDark">@color/bg_dark</item>
+        <item name="colorAccent">@color/cyan_accent</item>
         <item name="android:windowBackground">@color/bg_dark</item>
         <item name="android:statusBarColor">@color/bg_dark</item>
         <item name="android:navigationBarColor">@color/bg_dark</item>
     </style>
 
-    <style name="Theme.SthlmMetro.Dialog" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/cyan_accent</item>
+    <style name="Theme.SthlmMetro" parent="Theme.TRadar" />
+
+    <style name="Theme.TRadar.Dialog" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="colorAccent">@color/cyan_accent</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:backgroundDimEnabled">true</item>

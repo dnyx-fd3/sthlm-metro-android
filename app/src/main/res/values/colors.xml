@@ -1,22 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg_dark">#030914</color>
-    <color name="card_bg">#050D1A</color>
-    <color name="row_bg">#0B172A</color>
+    <!-- App dark radar palette -->
+    <color name="bg_dark">#040914</color>
+    <color name="card_bg">#0A1324</color>
+    <color name="row_bg">#0E1A30</color>
     <color name="cyan_accent">#29E6FF</color>
+    <color name="magenta_accent">#FF2A85</color>
     <color name="text_primary">#F1F5F9</color>
     <color name="text_secondary">#94A3B8</color>
     <color name="amber_warn">#FBBF24</color>
     <color name="rose_cancel">#FB7185</color>
 
+    <!-- Explicit Forced Dark / Light widget palettes -->
+    <color name="w_dark_surface">#101722</color>
+    <color name="w_dark_card">#1A2434</color>
+    <color name="w_dark_tab_idle">#1E293B</color>
+    <color name="w_dark_tab_active">#29E6FF</color>
+    <color name="w_dark_tab_active_text">#040914</color>
+    <color name="w_dark_text_primary">#F8FAFC</color>
+    <color name="w_dark_text_secondary">#94A3B8</color>
+    <color name="w_dark_accent">#29E6FF</color>
+
+    <color name="w_light_surface">#F8FAFC</color>
+    <color name="w_light_card">#E9EFF6</color>
+    <color name="w_light_tab_idle">#E2E8F0</color>
+    <color name="w_light_tab_active">#0284C7</color>
+    <color name="w_light_tab_active_text">#FFFFFF</color>
+    <color name="w_light_text_primary">#0F172A</color>
+    <color name="w_light_text_secondary">#475569</color>
+    <color name="w_light_accent">#0284C7</color>
+
+    <!-- Auto Theme fallback (Android 8-11 Light) -->
     <color name="widget_surface">#F8FAFC</color>
-    <color name="widget_card">#EDF2F7</color>
+    <color name="widget_card">#E9EFF6</color>
     <color name="widget_tab_idle">#E2E8F0</color>
     <color name="widget_tab_active">#0284C7</color>
     <color name="widget_tab_active_text">#FFFFFF</color>
     <color name="widget_text_primary">#0F172A</color>
     <color name="widget_text_secondary">#475569</color>
     <color name="widget_accent">#0284C7</color>
-    <color name="widget_warn">#B45309</color>
+    <color name="widget_warn">#D97706</color>
     <color name="widget_cancel">#E11D48</color>
 </resources>

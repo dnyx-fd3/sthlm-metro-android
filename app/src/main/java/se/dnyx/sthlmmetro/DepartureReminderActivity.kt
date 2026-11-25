@@ -18,7 +18,7 @@ import java.time.format.DateTimeFormatter
 class DepartureReminderActivity : AppCompatActivity() {
 
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
-    private var slotIndex = 0
+    private var slotIndex = -1
     private var stationName = ""
     private var designation = ""
     private var destination = ""
@@ -46,7 +46,7 @@ class DepartureReminderActivity : AppCompatActivity() {
         setContentView(R.layout.activity_departure_reminder)
 
         appWidgetId = intent.getIntExtra(EXTRA_WIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
-        slotIndex = intent.getIntExtra(EXTRA_SLOT_INDEX, 0)
+        slotIndex = intent.getIntExtra(EXTRA_SLOT_INDEX, -1)
         stationName = intent.getStringExtra(EXTRA_STATION_NAME).orEmpty()
         designation = intent.getStringExtra(EXTRA_DESIGNATION).orEmpty()
         destination = intent.getStringExtra(EXTRA_DESTINATION).orEmpty()
@@ -54,13 +54,7 @@ class DepartureReminderActivity : AppCompatActivity() {
         expectedEpochMs = intent.getLongExtra(EXTRA_EXPECTED_EPOCH_MS, 0L)
         walkMinutes = intent.getIntExtra(EXTRA_WALK_MINUTES, 3).coerceIn(0, 30)
 
-        AnalyticsHelper.logDepartureTapped(
-            context = this,
-            stationName = stationName,
-            lineNumber = designation,
-            destination = destination,
-            walkMinutes = walkMinutes
-        )
+        AnalyticsHelper.logDepartureTapped(this, stationName, designation, destination, walkMinutes)
 
         val styleName = intent.getStringExtra(EXTRA_BADGE_STYLE) ?: "CYAN"
         val badgeStyle = LineBadgeStyle.entries.firstOrNull { it.name == styleName } ?: LineBadgeStyle.CYAN
@@ -71,7 +65,7 @@ class DepartureReminderActivity : AppCompatActivity() {
 
         findViewById<TextView>(R.id.rem_dest).text = destination.ifEmpty { "Stockholm" }
         findViewById<TextView>(R.id.rem_meta).text =
-            if (clockTime.isNotEmpty()) "$stationName · Departs $clockTime" else stationName
+            if (clockTime.isNotEmpty()) "$stationName · $clockTime" else stationName
 
         countdownBanner = findViewById(R.id.rem_countdown_banner)
         walkValueText = findViewById(R.id.rem_walk_value)
@@ -97,18 +91,6 @@ class DepartureReminderActivity : AppCompatActivity() {
         }
 
         setTimerBtn.setOnClickListener { onSetTimerClicked() }
-
-        findViewById<View>(R.id.rem_btn_open_radar).setOnClickListener {
-            startActivity(
-                Intent(this, MainActivity::class.java).apply {
-                    putExtra(MainActivity.EXTRA_LAUNCH_SOURCE, "reminder_dialog")
-                    putExtra(MainActivity.EXTRA_STATION_NAME, stationName)
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                }
-            )
-            finish()
-        }
-
         updateCountdownUI()
     }
 
@@ -123,8 +105,8 @@ class DepartureReminderActivity : AppCompatActivity() {
     }
 
     private fun persistWalkDefault() {
-        if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-            WidgetPrefs.updateSlotWalkMinutes(this, appWidgetId, slotIndex, walkMinutes)
+        if (slotIndex >= 0) {
+            WidgetPrefs.updateSlotWalkMinutes(this, slotIndex, walkMinutes)
         }
     }
 
@@ -134,8 +116,8 @@ class DepartureReminderActivity : AppCompatActivity() {
         val remainingSec = ((expectedEpochMs - nowMs) / 1000L).toInt()
 
         if (expectedEpochMs <= 0L || remainingSec <= 0) {
-            countdownBanner.text = "That departure has already left!"
-            setTimerBtn.text = "↻ REFRESH WIDGET"
+            countdownBanner.text = "Already departed"
+            setTimerBtn.text = "↻ REFRESH"
             return
         }
 
@@ -148,7 +130,7 @@ class DepartureReminderActivity : AppCompatActivity() {
                 .format(clockFmt)
             setTimerBtn.text = "🔔 RING IN ${formatDuration(timerSec)} ($ringAtStr)"
         } else {
-            setTimerBtn.text = "🏃 SPRINT! (Leaves in ${formatDuration(remainingSec)})"
+            setTimerBtn.text = "🏃 LEAVE NOW (${formatDuration(remainingSec)})"
         }
     }
 
@@ -160,18 +142,13 @@ class DepartureReminderActivity : AppCompatActivity() {
             if (appWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
                 MetroWidgetProvider.triggerAsyncRefresh(this, appWidgetId, trigger = "reminder_stale")
             }
-            Toast.makeText(this, "Refreshing live SL departures…", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
 
         val timerSec = remainingSec - walkMinutes * 60
         if (timerSec < 10) {
-            Toast.makeText(
-                this,
-                "Leaves in ${formatDuration(remainingSec)} — time to head out now!",
-                Toast.LENGTH_LONG
-            ).show()
+            Toast.makeText(this, "Leaves in ${formatDuration(remainingSec)} — head out now!", Toast.LENGTH_LONG).show()
             finish()
             return
         }
@@ -184,22 +161,11 @@ class DepartureReminderActivity : AppCompatActivity() {
         }
         try {
             startActivity(intent)
-            AnalyticsHelper.logReminderSet(
-                context = this,
-                stationName = stationName,
-                lineNumber = designation,
-                destination = destination,
-                walkMinutes = walkMinutes,
-                timerSeconds = timerSec
-            )
-            Toast.makeText(
-                this,
-                "Timer set for ${formatDuration(timerSec)}: $designation → $destination",
-                Toast.LENGTH_LONG
-            ).show()
+            AnalyticsHelper.logReminderSet(this, stationName, designation, destination, walkMinutes, timerSec)
+            Toast.makeText(this, "Timer set: ${formatDuration(timerSec)}", Toast.LENGTH_SHORT).show()
             finish()
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(this, "No Clock app found to start timer.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "No Clock app found.", Toast.LENGTH_SHORT).show()
         }
     }
 

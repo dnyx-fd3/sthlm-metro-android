@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">T-Radar</string>
-    <string name="widget_name">T-Radar Live</string>
-    <string name="widget_description">Track up to 3 Stockholm SL stops with live ticking countdowns, walk-buffer reminders, and custom opacity.</string>
-    <string name="config_title">T-Radar Widget Setup</string>
+    <string name="widget_board_name">T-Radar Board</string>
+    <string name="widget_board_desc">Resizable 4×1 / 4×2 / 4×3 live SL departures with 3 stops, Near Me &amp; neon cat.</string>
+    <string name="widget_mini_name">T-Radar Mini (4×1)</string>
+    <string name="widget_mini_desc">Minimal 1-row live SL countdown bar with Near Me &amp; 1-tap refresh.</string>
+    <string name="config_title">T-Radar Settings</string>
 </resources>

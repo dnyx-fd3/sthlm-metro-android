@@ -62,8 +62,6 @@ class WidgetRefreshWorker(
                 )
                 .setBackoffCriteria(BackoffPolicy.LINEAR, 10, TimeUnit.SECONDS)
 
-            // On Android 12+ (API 31+), expedited JobScheduler jobs run immediately and
-            // explicitly grant background network access through Android 15/16's firewall.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 builder.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             }

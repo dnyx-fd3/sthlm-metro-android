@@ -7,7 +7,10 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.os.Bundle
 import android.os.SystemClock
+import android.util.SizeF
 import android.view.View
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
@@ -19,7 +22,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executors
 
-class MetroWidgetProvider : AppWidgetProvider() {
+open class MetroWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         AnalyticsHelper.syncCollectionState(context)
@@ -28,20 +31,35 @@ class MetroWidgetProvider : AppWidgetProvider() {
             try {
                 for (widgetId in appWidgetIds) {
                     val cfg = WidgetPrefs.load(context, widgetId)
-                    val cached = WidgetPrefs.loadCache(context, widgetId, cfg.activeSlotIndex)
+                    val cached = WidgetPrefs.loadCache(context, "w_$widgetId")
                     val cacheMatches = cached != null &&
                         cached.siteId == cfg.activeSlot.siteId &&
                         cached.filterCode == cfg.activeSlot.filter.code
                     if (cacheMatches) {
                         renderFromCache(context, appWidgetManager, widgetId, cfg, cached!!, logEmptyCat = false)
                     } else {
-                        // Do NOT enqueue one-time WorkManager from onUpdate (avoids ACTION_PACKAGE_CHANGED loop)
                         refreshWidgetBlocking(context, appWidgetManager, widgetId, trigger = "system", isFinalAttempt = true)
                     }
                 }
             } finally {
                 pendingResult.finish()
             }
+        }
+    }
+
+    override fun onAppWidgetOptionsChanged(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetId: Int,
+        newOptions: Bundle
+    ) {
+        val cfg = WidgetPrefs.load(context, appWidgetId)
+        val cached = WidgetPrefs.loadCache(context, "w_$appWidgetId")
+        if (cached != null &&
+            cached.siteId == cfg.activeSlot.siteId &&
+            cached.filterCode == cfg.activeSlot.filter.code
+        ) {
+            renderFromCache(context, appWidgetManager, appWidgetId, cfg, cached, logEmptyCat = false)
         }
     }
 
@@ -61,14 +79,14 @@ class MetroWidgetProvider : AppWidgetProvider() {
         val ids = if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
             intArrayOf(widgetId)
         } else {
-            appWidgetManager.getAppWidgetIds(ComponentName(context, MetroWidgetProvider::class.java))
+            allWidgetIds(context, appWidgetManager)
         }
         if (ids.isEmpty()) return
 
         if (action == ACTION_LOCAL_TICK) {
             for (id in ids) {
                 val cfg = WidgetPrefs.load(context, id)
-                val cached = WidgetPrefs.loadCache(context, id, cfg.activeSlotIndex)
+                val cached = WidgetPrefs.loadCache(context, "w_$id")
                 if (cached != null &&
                     cached.siteId == cfg.activeSlot.siteId &&
                     cached.filterCode == cfg.activeSlot.filter.code
@@ -95,7 +113,7 @@ class MetroWidgetProvider : AppWidgetProvider() {
 
         for (id in ids) {
             val cfg = WidgetPrefs.load(context, id)
-            val cached = WidgetPrefs.loadCache(context, id, cfg.activeSlotIndex)
+            val cached = WidgetPrefs.loadCache(context, "w_$id")
             val cacheMatches = cached != null &&
                 cached.siteId == cfg.activeSlot.siteId &&
                 cached.filterCode == cfg.activeSlot.filter.code
@@ -112,21 +130,12 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 continue
             }
 
-            if (action == ACTION_REFRESH && cacheMatches) {
-                val partial = RemoteViews(context.packageName, R.layout.widget_departures)
-                partial.setTextViewText(R.id.widget_updated_at, "Refreshing live SL…")
-                appWidgetManager.partiallyUpdateAppWidget(id, partial)
-            } else {
-                val loadingViews = buildBaseViews(context, id, cfg)
-                loadingViews.setTextViewText(
-                    R.id.widget_updated_at,
-                    "Loading ${cfg.activeSlot.stationName}…"
-                )
-                appWidgetManager.updateAppWidget(id, loadingViews)
+            // Show immediate responsive loading banner
+            val loadingViews = buildResponsiveViews(context, appWidgetManager, id, cfg) { layoutType ->
+                buildStatusLayout(context, id, cfg, layoutType, "Refreshing SL…", "Loading ${cfg.activeSlot.stationName}…")
             }
+            appWidgetManager.updateAppWidget(id, loadingViews)
 
-            // Route network fetch via expedited WorkManager (JobScheduler) so Android 15/16
-            // always grants network access even after 10+ hours in the background!
             WidgetRefreshWorker.enqueue(context, id, triggerLabel)
         }
     }
@@ -134,7 +143,7 @@ class MetroWidgetProvider : AppWidgetProvider() {
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
         for (id in appWidgetIds) {
             cancelLocalRollover(context, id)
-            WidgetPrefs.delete(context, id)
+            WidgetPrefs.deleteWidgetState(context, id)
         }
     }
 
@@ -142,6 +151,24 @@ class MetroWidgetProvider : AppWidgetProvider() {
         DONE,
         RETRYABLE_NETWORK
     }
+
+    private enum class LayoutType {
+        MINI, COMPACT, BOARD
+    }
+
+    private data class WidgetPalette(
+        val bgRes: Int,
+        val rowRes: Int,
+        val tabActiveRes: Int,
+        val tabIdleRes: Int,
+        val btnRes: Int,
+        val textPrimary: Int,
+        val textSecondary: Int,
+        val tabActiveText: Int,
+        val accent: Int,
+        val warn: Int,
+        val cancel: Int
+    )
 
     companion object {
         const val ACTION_REFRESH = "se.dnyx.sthlmmetro.ACTION_REFRESH_WIDGET"
@@ -162,10 +189,21 @@ class MetroWidgetProvider : AppWidgetProvider() {
         private val SUB_IDS = intArrayOf(R.id.row_0_sub, R.id.row_1_sub, R.id.row_2_sub, R.id.row_3_sub)
         private val CHRONO_IDS = intArrayOf(R.id.row_0_chrono, R.id.row_1_chrono, R.id.row_2_chrono, R.id.row_3_chrono)
         private val ETA_IDS = intArrayOf(R.id.row_0_eta, R.id.row_1_eta, R.id.row_2_eta, R.id.row_3_eta)
-        private val CLOCK_IDS = intArrayOf(R.id.row_0_clock, R.id.row_1_clock, R.id.row_2_clock, R.id.row_3_clock)
+
+        fun allWidgetIds(context: Context, manager: AppWidgetManager = AppWidgetManager.getInstance(context)): IntArray {
+            val boardIds = manager.getAppWidgetIds(ComponentName(context, MetroWidgetProvider::class.java))
+            val miniIds = manager.getAppWidgetIds(ComponentName(context, MiniWidgetProvider::class.java))
+            return (boardIds.toList() + miniIds.toList()).distinct().toIntArray()
+        }
+
+        fun refreshAllWidgets(context: Context, trigger: String = "settings_save") {
+            val manager = AppWidgetManager.getInstance(context)
+            for (id in allWidgetIds(context, manager)) {
+                WidgetRefreshWorker.enqueue(context, id, trigger)
+            }
+        }
 
         fun triggerAsyncRefresh(context: Context, appWidgetId: Int, trigger: String = "config_save") {
-            // Also show immediate loading state and enqueue via WorkManager
             WidgetRefreshWorker.enqueue(context, appWidgetId, trigger)
         }
 
@@ -183,16 +221,14 @@ class MetroWidgetProvider : AppWidgetProvider() {
             try {
                 val fetched = try {
                     SlApiClient.fetchDepartures(active.siteId, active.filter, limit = 20)
-                } catch (firstErr: IOException) {
-                    // Quick 1.2s retry inside the JobScheduler window for DNS/wake-from-sleep hiccups
+                } catch (_: IOException) {
                     Thread.sleep(1200L)
                     SlApiClient.fetchDepartures(active.siteId, active.filter, limit = 20)
                 }
                 val fetchedAtMs = System.currentTimeMillis()
                 WidgetPrefs.saveCache(
                     context = context,
-                    appWidgetId = appWidgetId,
-                    slotIndex = cfg.activeSlotIndex,
+                    cacheKey = "w_$appWidgetId",
                     siteId = active.siteId,
                     filter = active.filter,
                     fetchedAtMs = fetchedAtMs,
@@ -203,61 +239,30 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 return RefreshOutcome.DONE
             } catch (_: SlRateLimitException) {
                 AnalyticsHelper.logSlError(context, active, "429_rate_limit")
-                renderFailure(
-                    context = context,
-                    appWidgetManager = appWidgetManager,
-                    appWidgetId = appWidgetId,
-                    cfg = cfg,
-                    headerNote = "SL 429 limit · Wait & tap ↻",
-                    bodyNote = "SL rate limit hit (429). Wait a moment and tap ↻."
-                )
+                renderFailure(context, appWidgetManager, appWidgetId, cfg, "SL 429 limit", "SL rate limit (429). Tap ↻.")
                 return RefreshOutcome.DONE
             } catch (e: SlHttpException) {
                 AnalyticsHelper.logSlError(context, active, "http_${e.statusCode}")
-                renderFailure(
-                    context = context,
-                    appWidgetManager = appWidgetManager,
-                    appWidgetId = appWidgetId,
-                    cfg = cfg,
-                    headerNote = "SL HTTP ${e.statusCode} · Tap ↻ to retry",
-                    bodyNote = "SL returned HTTP ${e.statusCode}. Tap ↻ to retry."
-                )
+                renderFailure(context, appWidgetManager, appWidgetId, cfg, "SL HTTP ${e.statusCode}", "SL HTTP ${e.statusCode}. Tap ↻.")
                 return RefreshOutcome.DONE
             } catch (e: IOException) {
-                if (!isFinalAttempt) {
-                    // Let WorkManager retry once OS network constraint stabilizes
-                    return RefreshOutcome.RETRYABLE_NETWORK
-                }
+                if (!isFinalAttempt) return RefreshOutcome.RETRYABLE_NETWORK
                 val tag = when (e) {
                     is UnknownHostException -> "dns"
                     is SocketTimeoutException -> "timeout"
                     else -> "io"
                 }
                 AnalyticsHelper.logSlError(context, active, "network_$tag")
-                val reason = when (e) {
-                    is UnknownHostException -> "No DNS/network"
-                    is SocketTimeoutException -> "SL timed out"
+                val shortMsg = when (e) {
+                    is UnknownHostException -> "Offline"
+                    is SocketTimeoutException -> "Timed out"
                     else -> "Offline"
                 }
-                renderFailure(
-                    context = context,
-                    appWidgetManager = appWidgetManager,
-                    appWidgetId = appWidgetId,
-                    cfg = cfg,
-                    headerNote = "$reason · Tap ↻ to retry",
-                    bodyNote = "Couldn't reach SL ($reason). Tap ↻ to retry."
-                )
+                renderFailure(context, appWidgetManager, appWidgetId, cfg, "$shortMsg · Tap ↻", "$shortMsg · Tap ↻")
                 return RefreshOutcome.DONE
             } catch (_: Exception) {
                 AnalyticsHelper.logSlError(context, active, "unknown")
-                renderFailure(
-                    context = context,
-                    appWidgetManager = appWidgetManager,
-                    appWidgetId = appWidgetId,
-                    cfg = cfg,
-                    headerNote = "Offline · Tap ↻ to retry",
-                    bodyNote = "Couldn't reach SL right now. Tap ↻ to retry."
-                )
+                renderFailure(context, appWidgetManager, appWidgetId, cfg, "Offline · Tap ↻", "Offline · Tap ↻")
                 return RefreshOutcome.DONE
             }
         }
@@ -270,8 +275,7 @@ class MetroWidgetProvider : AppWidgetProvider() {
             headerNote: String,
             bodyNote: String
         ) {
-            // If we still have non-expired cached departures for this exact stop, keep showing them!
-            val cached = WidgetPrefs.loadCache(context, appWidgetId, cfg.activeSlotIndex)
+            val cached = WidgetPrefs.loadCache(context, "w_$appWidgetId")
             val nowMs = System.currentTimeMillis()
             val hasLiveCache = cached != null &&
                 cached.siteId == cfg.activeSlot.siteId &&
@@ -279,25 +283,12 @@ class MetroWidgetProvider : AppWidgetProvider() {
                 cached.items.any { it.expectedEpochMs <= 0L || it.expectedEpochMs > nowMs - 10_000L }
 
             if (hasLiveCache) {
-                renderFromCache(
-                    context = context,
-                    appWidgetManager = appWidgetManager,
-                    appWidgetId = appWidgetId,
-                    cfg = cfg,
-                    cache = cached!!,
-                    logEmptyCat = false,
-                    overrideSubtitle = headerNote
-                )
+                renderFromCache(context, appWidgetManager, appWidgetId, cfg, cached!!, logEmptyCat = false, overrideSubtitle = headerNote)
                 return
             }
 
-            val views = buildBaseViews(context, appWidgetId, cfg)
-            views.setTextViewText(R.id.widget_updated_at, headerNote)
-            views.setViewVisibility(R.id.widget_cat_empty, View.GONE)
-            views.setViewVisibility(R.id.widget_status_text, View.VISIBLE)
-            views.setTextViewText(R.id.widget_status_text, bodyNote)
-            for (i in 0 until 4) {
-                views.setViewVisibility(ROW_IDS[i], View.GONE)
+            val views = buildResponsiveViews(context, appWidgetManager, appWidgetId, cfg) { layoutType ->
+                buildStatusLayout(context, appWidgetId, cfg, layoutType, headerNote, bodyNote)
             }
             cancelLocalRollover(context, appWidgetId)
             appWidgetManager.updateAppWidget(appWidgetId, views)
@@ -313,82 +304,293 @@ class MetroWidgetProvider : AppWidgetProvider() {
             overrideSubtitle: String? = null
         ) {
             val active = cfg.activeSlot
-            val views = buildBaseViews(context, appWidgetId, cfg)
-
-            val textPrimary = ContextCompat.getColor(context, R.color.widget_text_primary)
-            val textSecondary = ContextCompat.getColor(context, R.color.widget_text_secondary)
-            val accentColor = ContextCompat.getColor(context, R.color.widget_accent)
-            val warnColor = ContextCompat.getColor(context, R.color.widget_warn)
-            val cancelColor = ContextCompat.getColor(context, R.color.widget_cancel)
-
             val nowMs = System.currentTimeMillis()
-            val elapsedNow = SystemClock.elapsedRealtime()
             val syncClock = Instant.ofEpochMilli(cache.fetchedAtMs)
                 .atZone(ZoneId.systemDefault())
                 .toLocalTime()
                 .format(timeFmt)
-            val modeTag = if (active.filter != ModeFilter.AUTO) " · ${active.filter.label}" else ""
 
             val upcoming = cache.items.filter { d ->
                 d.expectedEpochMs <= 0L || d.expectedEpochMs > nowMs - 10_000L
             }
 
             if (upcoming.isEmpty()) {
+                // Auto-purge expired timetable cache to keep storage minimal!
+                WidgetPrefs.clearCache(context, "w_$appWidgetId")
                 if (logEmptyCat) {
                     AnalyticsHelper.logWidgetCatShown(context, active)
                 }
-                views.setTextViewText(R.id.widget_updated_at, overrideSubtitle ?: "Last sync $syncClock$modeTag")
-                views.setViewVisibility(R.id.widget_status_text, View.GONE)
-                views.setViewVisibility(R.id.widget_cat_empty, View.VISIBLE)
-                views.setTextViewText(R.id.widget_cat_caption, "All buses left without you... poke ↻")
-                for (i in 0 until 4) {
-                    views.setViewVisibility(ROW_IDS[i], View.GONE)
+                val views = buildResponsiveViews(context, appWidgetManager, appWidgetId, cfg) { layoutType ->
+                    buildEmptyCatLayout(context, appWidgetId, cfg, layoutType, overrideSubtitle ?: syncClock)
                 }
                 cancelLocalRollover(context, appWidgetId)
                 appWidgetManager.updateAppWidget(appWidgetId, views)
                 return
             }
 
-            views.setTextViewText(
-                R.id.widget_updated_at,
-                overrideSubtitle ?: "Synced $syncClock$modeTag · Tap row to remind"
-            )
+            val subtitle = overrideSubtitle ?: buildHeaderMeta(cfg, syncClock)
+            val views = buildResponsiveViews(context, appWidgetManager, appWidgetId, cfg) { layoutType ->
+                buildDeparturesLayout(context, appWidgetId, cfg, layoutType, subtitle, upcoming, nowMs)
+            }
+
+            val nextRolloverMs = upcoming.take(4)
+                .mapNotNull { if (it.expectedEpochMs > 0L) it.expectedEpochMs + 8_000L else null }
+                .minOrNull()
+
+            if (nextRolloverMs != null) {
+                scheduleLocalRollover(context, appWidgetId, maxOf(nowMs + 15_000L, nextRolloverMs))
+            } else {
+                cancelLocalRollover(context, appWidgetId)
+            }
+
+            appWidgetManager.updateAppWidget(appWidgetId, views)
+        }
+
+        private fun buildHeaderMeta(cfg: WidgetConfig, syncClock: String): String {
+            val near = cfg.nearbyOverride
+            return if (near != null) {
+                "📍 ${near.walkMinutes}m walk · $syncClock"
+            } else {
+                syncClock
+            }
+        }
+
+        private fun buildResponsiveViews(
+            context: Context,
+            appWidgetManager: AppWidgetManager,
+            appWidgetId: Int,
+            cfg: WidgetConfig,
+            builder: (LayoutType) -> RemoteViews
+        ): RemoteViews {
+            val info = appWidgetManager.getAppWidgetInfo(appWidgetId)
+            val isDedicatedMini = info?.provider?.className == MiniWidgetProvider::class.java.name
+            if (isDedicatedMini) {
+                return builder(LayoutType.MINI)
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val sizeMap = mapOf(
+                    SizeF(180f, 40f) to builder(LayoutType.MINI),
+                    SizeF(180f, 110f) to builder(LayoutType.COMPACT),
+                    SizeF(180f, 195f) to builder(LayoutType.BOARD)
+                )
+                return RemoteViews(sizeMap)
+            }
+
+            val opts = appWidgetManager.getAppWidgetOptions(appWidgetId)
+            val minH = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 140)
+            val chosen = when {
+                minH < 95 -> LayoutType.MINI
+                minH < 185 -> LayoutType.COMPACT
+                else -> LayoutType.BOARD
+            }
+            return builder(chosen)
+        }
+
+        private fun resolvePalette(context: Context, theme: WidgetTheme): WidgetPalette {
+            return when (theme) {
+                WidgetTheme.DARK -> WidgetPalette(
+                    bgRes = R.drawable.widget_bg_dark,
+                    rowRes = R.drawable.widget_row_dark,
+                    tabActiveRes = R.drawable.widget_tab_active_dark,
+                    tabIdleRes = R.drawable.widget_tab_idle_dark,
+                    btnRes = R.drawable.widget_btn_dark,
+                    textPrimary = ContextCompat.getColor(context, R.color.w_dark_text_primary),
+                    textSecondary = ContextCompat.getColor(context, R.color.w_dark_text_secondary),
+                    tabActiveText = ContextCompat.getColor(context, R.color.w_dark_tab_active_text),
+                    accent = ContextCompat.getColor(context, R.color.w_dark_accent),
+                    warn = ContextCompat.getColor(context, R.color.widget_warn),
+                    cancel = ContextCompat.getColor(context, R.color.widget_cancel)
+                )
+                WidgetTheme.LIGHT -> WidgetPalette(
+                    bgRes = R.drawable.widget_bg_light,
+                    rowRes = R.drawable.widget_row_light,
+                    tabActiveRes = R.drawable.widget_tab_active_light,
+                    tabIdleRes = R.drawable.widget_tab_idle_light,
+                    btnRes = R.drawable.widget_btn_light,
+                    textPrimary = ContextCompat.getColor(context, R.color.w_light_text_primary),
+                    textSecondary = ContextCompat.getColor(context, R.color.w_light_text_secondary),
+                    tabActiveText = ContextCompat.getColor(context, R.color.w_light_tab_active_text),
+                    accent = ContextCompat.getColor(context, R.color.w_light_accent),
+                    warn = ContextCompat.getColor(context, R.color.widget_warn),
+                    cancel = ContextCompat.getColor(context, R.color.widget_cancel)
+                )
+                WidgetTheme.AUTO -> WidgetPalette(
+                    bgRes = R.drawable.widget_bg_auto,
+                    rowRes = R.drawable.widget_row_auto,
+                    tabActiveRes = R.drawable.widget_tab_active_auto,
+                    tabIdleRes = R.drawable.widget_tab_idle_auto,
+                    btnRes = R.drawable.widget_btn_auto,
+                    textPrimary = ContextCompat.getColor(context, R.color.widget_text_primary),
+                    textSecondary = ContextCompat.getColor(context, R.color.widget_text_secondary),
+                    tabActiveText = ContextCompat.getColor(context, R.color.widget_tab_active_text),
+                    accent = ContextCompat.getColor(context, R.color.widget_accent),
+                    warn = ContextCompat.getColor(context, R.color.widget_warn),
+                    cancel = ContextCompat.getColor(context, R.color.widget_cancel)
+                )
+            }
+        }
+
+        private fun buildStatusLayout(
+            context: Context,
+            appWidgetId: Int,
+            cfg: WidgetConfig,
+            layoutType: LayoutType,
+            headerNote: String,
+            bodyNote: String
+        ): RemoteViews {
+            val palette = resolvePalette(context, cfg.theme)
+            val views = createThemedBase(context, appWidgetId, cfg, layoutType, palette)
+            if (layoutType == LayoutType.MINI) {
+                views.setViewVisibility(R.id.mini_dep_container, View.GONE)
+                views.setViewVisibility(R.id.mini_cat_container, View.GONE)
+                views.setViewVisibility(R.id.mini_status, View.VISIBLE)
+                views.setTextViewText(R.id.mini_status, bodyNote)
+                views.setTextColor(R.id.mini_status, palette.textSecondary)
+                views.setOnClickPendingIntent(R.id.mini_status, openAppPendingIntent(context, appWidgetId))
+                return views
+            }
+
+            val maxRows = if (layoutType == LayoutType.COMPACT) 2 else 4
+            views.setTextViewText(R.id.widget_updated_at, headerNote)
+            views.setViewVisibility(R.id.widget_cat_empty, View.GONE)
+            views.setViewVisibility(R.id.widget_status_text, View.VISIBLE)
+            views.setTextViewText(R.id.widget_status_text, bodyNote)
+            views.setTextColor(R.id.widget_status_text, palette.textSecondary)
+            for (i in 0 until maxRows) {
+                views.setViewVisibility(ROW_IDS[i], View.GONE)
+            }
+            return views
+        }
+
+        private fun buildEmptyCatLayout(
+            context: Context,
+            appWidgetId: Int,
+            cfg: WidgetConfig,
+            layoutType: LayoutType,
+            subtitle: String
+        ): RemoteViews {
+            val palette = resolvePalette(context, cfg.theme)
+            val views = createThemedBase(context, appWidgetId, cfg, layoutType, palette)
+            val catPi = catPokePendingIntent(context, appWidgetId)
+
+            if (layoutType == LayoutType.MINI) {
+                views.setViewVisibility(R.id.mini_dep_container, View.GONE)
+                views.setViewVisibility(R.id.mini_status, View.GONE)
+                views.setViewVisibility(R.id.mini_cat_container, View.VISIBLE)
+                views.setTextViewText(R.id.mini_cat_text, "All left… poke ↻")
+                views.setTextColor(R.id.mini_cat_text, palette.textPrimary)
+                views.setOnClickPendingIntent(R.id.mini_cat_container, catPi)
+                return views
+            }
+
+            val maxRows = if (layoutType == LayoutType.COMPACT) 2 else 4
+            views.setTextViewText(R.id.widget_updated_at, subtitle)
+            views.setViewVisibility(R.id.widget_status_text, View.GONE)
+            views.setViewVisibility(R.id.widget_cat_empty, View.VISIBLE)
+            views.setTextViewText(R.id.widget_cat_caption, "All buses left without you... poke ↻")
+            views.setTextColor(R.id.widget_cat_caption, palette.textPrimary)
+            views.setOnClickPendingIntent(R.id.widget_cat_empty, catPi)
+            for (i in 0 until maxRows) {
+                views.setViewVisibility(ROW_IDS[i], View.GONE)
+            }
+            return views
+        }
+
+        private fun buildDeparturesLayout(
+            context: Context,
+            appWidgetId: Int,
+            cfg: WidgetConfig,
+            layoutType: LayoutType,
+            subtitle: String,
+            upcoming: List<DepartureItem>,
+            nowMs: Long
+        ): RemoteViews {
+            val palette = resolvePalette(context, cfg.theme)
+            val views = createThemedBase(context, appWidgetId, cfg, layoutType, palette)
+            val active = cfg.activeSlot
+            val elapsedNow = SystemClock.elapsedRealtime()
+
+            if (layoutType == LayoutType.MINI) {
+                val d = upcoming.first()
+                views.setViewVisibility(R.id.mini_status, View.GONE)
+                views.setViewVisibility(R.id.mini_cat_container, View.GONE)
+                views.setViewVisibility(R.id.mini_dep_container, View.VISIBLE)
+
+                views.setTextViewText(R.id.mini_badge, d.designation)
+                views.setInt(R.id.mini_badge, "setBackgroundResource", badgeDrawableFor(d.badgeStyle))
+                views.setTextViewText(R.id.mini_dest, d.destination)
+                views.setTextColor(R.id.mini_dest, if (d.cancelled) palette.cancel else palette.textPrimary)
+
+                val stopLine = if (cfg.nearbyOverride != null) {
+                    "${shortenTabLabel(active.stationName)} · ${cfg.nearbyOverride.walkMinutes}m"
+                } else {
+                    shortenTabLabel(active.stationName)
+                }
+                views.setTextViewText(R.id.mini_stop, stopLine)
+                views.setTextColor(R.id.mini_stop, palette.textSecondary)
+
+                val remainingMs = if (d.expectedEpochMs > 0L) d.expectedEpochMs - nowMs else -1L
+                val etaColor = when {
+                    d.cancelled -> palette.cancel
+                    d.delayMinutes > 0 -> palette.warn
+                    else -> palette.accent
+                }
+
+                if (!d.cancelled && remainingMs in 6_000L..3_599_000L) {
+                    views.setViewVisibility(R.id.mini_chrono, View.VISIBLE)
+                    views.setViewVisibility(R.id.mini_eta, View.GONE)
+                    views.setChronometerCountDown(R.id.mini_chrono, true)
+                    views.setChronometer(R.id.mini_chrono, elapsedNow + remainingMs, null, true)
+                    views.setTextColor(R.id.mini_chrono, etaColor)
+                } else {
+                    views.setChronometer(R.id.mini_chrono, elapsedNow, null, false)
+                    views.setViewVisibility(R.id.mini_chrono, View.GONE)
+                    views.setViewVisibility(R.id.mini_eta, View.VISIBLE)
+                    views.setTextViewText(R.id.mini_eta, fallbackEtaLabel(d, remainingMs))
+                    views.setTextColor(R.id.mini_eta, etaColor)
+                }
+
+                views.setOnClickPendingIntent(
+                    R.id.mini_dep_container,
+                    reminderPendingIntent(context, appWidgetId, cfg, d, rowIndex = 0)
+                )
+                return views
+            }
+
+            val maxRows = if (layoutType == LayoutType.COMPACT) 2 else 4
+            views.setTextViewText(R.id.widget_updated_at, subtitle)
             views.setViewVisibility(R.id.widget_status_text, View.GONE)
             views.setViewVisibility(R.id.widget_cat_empty, View.GONE)
 
-            val shown = upcoming.take(4)
-            var nextRolloverMs = Long.MAX_VALUE
-
-            for (i in 0 until 4) {
+            val shown = upcoming.take(maxRows)
+            for (i in 0 until maxRows) {
                 if (i < shown.size) {
                     val d = shown[i]
                     views.setViewVisibility(ROW_IDS[i], View.VISIBLE)
                     views.setTextViewText(BADGE_IDS[i], d.designation)
                     views.setInt(BADGE_IDS[i], "setBackgroundResource", badgeDrawableFor(d.badgeStyle))
-
                     views.setTextViewText(DEST_IDS[i], d.destination)
-                    views.setTextColor(DEST_IDS[i], if (d.cancelled) cancelColor else textPrimary)
+                    views.setTextColor(DEST_IDS[i], if (d.cancelled) palette.cancel else palette.textPrimary)
 
-                    val subText = when {
-                        d.cancelled -> "Cancelled · ${d.modeLabel}"
-                        d.delayMinutes > 0 -> "+${d.delayMinutes}m late · ${d.modeLabel}"
-                        else -> d.modeLabel
+                    // Minimal UI: hide subtitle unless delayed or cancelled!
+                    if (d.cancelled) {
+                        views.setViewVisibility(SUB_IDS[i], View.VISIBLE)
+                        views.setTextViewText(SUB_IDS[i], "Cancelled")
+                        views.setTextColor(SUB_IDS[i], palette.cancel)
+                    } else if (d.delayMinutes > 0) {
+                        views.setViewVisibility(SUB_IDS[i], View.VISIBLE)
+                        views.setTextViewText(SUB_IDS[i], "+${d.delayMinutes}m late")
+                        views.setTextColor(SUB_IDS[i], palette.warn)
+                    } else {
+                        views.setViewVisibility(SUB_IDS[i], View.GONE)
                     }
-                    views.setTextViewText(SUB_IDS[i], subText)
-                    views.setTextColor(
-                        SUB_IDS[i],
-                        when {
-                            d.cancelled -> cancelColor
-                            d.delayMinutes > 0 -> warnColor
-                            else -> textSecondary
-                        }
-                    )
 
                     val remainingMs = if (d.expectedEpochMs > 0L) d.expectedEpochMs - nowMs else -1L
                     val etaColor = when {
-                        d.cancelled -> cancelColor
-                        d.delayMinutes > 0 -> warnColor
-                        else -> accentColor
+                        d.cancelled -> palette.cancel
+                        d.delayMinutes > 0 -> palette.warn
+                        else -> palette.accent
                     }
 
                     if (!d.cancelled && remainingMs in 6_000L..3_599_000L) {
@@ -401,58 +603,202 @@ class MetroWidgetProvider : AppWidgetProvider() {
                         views.setChronometer(CHRONO_IDS[i], elapsedNow, null, false)
                         views.setViewVisibility(CHRONO_IDS[i], View.GONE)
                         views.setViewVisibility(ETA_IDS[i], View.VISIBLE)
-                        val fallbackLabel = when {
-                            d.cancelled -> "—"
-                            d.expectedEpochMs > 0L && remainingMs <= 5_999L -> "NOW"
-                            d.clockTime.isNotEmpty() -> d.clockTime
-                            else -> d.display
-                        }
-                        views.setTextViewText(ETA_IDS[i], fallbackLabel)
+                        views.setTextViewText(ETA_IDS[i], fallbackEtaLabel(d, remainingMs))
                         views.setTextColor(ETA_IDS[i], etaColor)
                     }
 
-                    views.setTextViewText(CLOCK_IDS[i], d.clockTime)
-
-                    if (d.expectedEpochMs > 0L) {
-                        val candidateRollover = d.expectedEpochMs + 8_000L
-                        if (candidateRollover < nextRolloverMs) {
-                            nextRolloverMs = candidateRollover
-                        }
-                    }
-
-                    val remIntent = Intent(context, DepartureReminderActivity::class.java).apply {
-                        putExtra(DepartureReminderActivity.EXTRA_WIDGET_ID, appWidgetId)
-                        putExtra(DepartureReminderActivity.EXTRA_SLOT_INDEX, cfg.activeSlotIndex)
-                        putExtra(DepartureReminderActivity.EXTRA_STATION_NAME, active.stationName)
-                        putExtra(DepartureReminderActivity.EXTRA_DESIGNATION, d.designation)
-                        putExtra(DepartureReminderActivity.EXTRA_DESTINATION, d.destination)
-                        putExtra(DepartureReminderActivity.EXTRA_CLOCK_TIME, d.clockTime)
-                        putExtra(DepartureReminderActivity.EXTRA_EXPECTED_EPOCH_MS, d.expectedEpochMs)
-                        putExtra(DepartureReminderActivity.EXTRA_BADGE_STYLE, d.badgeStyle.name)
-                        putExtra(DepartureReminderActivity.EXTRA_WALK_MINUTES, active.walkMinutes)
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    }
-                    val remPi = PendingIntent.getActivity(
-                        context,
-                        appWidgetId * 50 + 30 + i,
-                        remIntent,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    views.setOnClickPendingIntent(
+                        ROW_IDS[i],
+                        reminderPendingIntent(context, appWidgetId, cfg, d, rowIndex = i)
                     )
-                    views.setOnClickPendingIntent(ROW_IDS[i], remPi)
                 } else {
                     views.setChronometer(CHRONO_IDS[i], elapsedNow, null, false)
                     views.setViewVisibility(ROW_IDS[i], View.GONE)
                 }
             }
 
-            if (nextRolloverMs < Long.MAX_VALUE) {
-                val triggerAt = maxOf(nowMs + 15_000L, nextRolloverMs)
-                scheduleLocalRollover(context, appWidgetId, triggerAt)
-            } else {
-                cancelLocalRollover(context, appWidgetId)
+            return views
+        }
+
+        private fun createThemedBase(
+            context: Context,
+            appWidgetId: Int,
+            cfg: WidgetConfig,
+            layoutType: LayoutType,
+            palette: WidgetPalette
+        ): RemoteViews {
+            val layoutId = when (layoutType) {
+                LayoutType.MINI -> R.layout.widget_mini
+                LayoutType.COMPACT -> R.layout.widget_compact
+                LayoutType.BOARD -> R.layout.widget_board
+            }
+            val views = RemoteViews(context.packageName, layoutId)
+
+            val bgAlpha = (cfg.opacityPercent.coerceIn(0, 100) * 255) / 100
+            val cardAlpha = if (cfg.opacityPercent == 0) 0 else ((bgAlpha * 0.85f).toInt().coerceAtLeast(36))
+            views.setImageViewResource(R.id.widget_bg_image, palette.bgRes)
+            views.setInt(R.id.widget_bg_image, "setImageAlpha", bgAlpha)
+
+            views.setInt(R.id.widget_near_btn, "setBackgroundResource", palette.btnRes)
+            views.setInt(R.id.widget_refresh_btn, "setBackgroundResource", palette.btnRes)
+            views.setTextColor(R.id.widget_refresh_btn, palette.accent)
+
+            views.setOnClickPendingIntent(R.id.widget_near_btn, nearMePendingIntent(context, appWidgetId))
+            views.setOnClickPendingIntent(R.id.widget_refresh_btn, refreshPendingIntent(context, appWidgetId))
+
+            if (layoutType == LayoutType.MINI) {
+                return views
             }
 
-            appWidgetManager.updateAppWidget(appWidgetId, views)
+            val maxRows = if (layoutType == LayoutType.COMPACT) 2 else 4
+            views.setImageViewResource(R.id.widget_cat_bg, palette.rowRes)
+            views.setInt(R.id.widget_cat_bg, "setImageAlpha", cardAlpha)
+            for (i in 0 until maxRows) {
+                views.setImageViewResource(ROW_BG_IDS[i], palette.rowRes)
+                views.setInt(ROW_BG_IDS[i], "setImageAlpha", cardAlpha)
+            }
+
+            val active = cfg.activeSlot
+            views.setTextViewText(R.id.widget_station_name, active.stationName)
+            views.setTextColor(R.id.widget_station_name, palette.textPrimary)
+            views.setTextColor(R.id.widget_updated_at, palette.textSecondary)
+
+            // Tapping header or status opens T-Radar app cleanly
+            val openAppPi = openAppPendingIntent(context, appWidgetId)
+            views.setOnClickPendingIntent(R.id.widget_header_tap, openAppPi)
+            views.setOnClickPendingIntent(R.id.widget_status_text, openAppPi)
+
+            // Station switcher tabs (if >1 stop configured)
+            if (cfg.slots.size > 1) {
+                views.setViewVisibility(R.id.widget_tabs_bar, View.VISIBLE)
+                val isNearbyActive = cfg.nearbyOverride != null
+                for (i in 0 until 3) {
+                    if (i < cfg.slots.size) {
+                        val slot = cfg.slots[i]
+                        val isSelected = !isNearbyActive && i == cfg.activeSlotIndex
+                        views.setViewVisibility(TAB_IDS[i], View.VISIBLE)
+                        views.setTextViewText(TAB_IDS[i], shortenTabLabel(slot.stationName))
+                        views.setInt(
+                            TAB_IDS[i],
+                            "setBackgroundResource",
+                            if (isSelected) palette.tabActiveRes else palette.tabIdleRes
+                        )
+                        views.setTextColor(
+                            TAB_IDS[i],
+                            if (isSelected) palette.tabActiveText else palette.textSecondary
+                        )
+
+                        val tabIntent = Intent(context, MetroWidgetProvider::class.java).apply {
+                            action = ACTION_SELECT_SLOT
+                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                            putExtra(EXTRA_SLOT_INDEX, i)
+                            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                        }
+                        val tabPi = PendingIntent.getBroadcast(
+                            context,
+                            appWidgetId * 60 + 10 + i,
+                            tabIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
+                        views.setOnClickPendingIntent(TAB_IDS[i], tabPi)
+                    } else {
+                        views.setViewVisibility(TAB_IDS[i], View.GONE)
+                    }
+                }
+            } else {
+                views.setViewVisibility(R.id.widget_tabs_bar, View.GONE)
+            }
+
+            return views
+        }
+
+        private fun fallbackEtaLabel(d: DepartureItem, remainingMs: Long): String = when {
+            d.cancelled -> "—"
+            d.expectedEpochMs > 0L && remainingMs <= 5_999L -> "NOW"
+            d.clockTime.isNotEmpty() -> d.clockTime
+            else -> d.display
+        }
+
+        private fun openAppPendingIntent(context: Context, appWidgetId: Int): PendingIntent {
+            val intent = Intent(context, MainActivity::class.java).apply {
+                putExtra(MainActivity.EXTRA_LAUNCH_SOURCE, "widget")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            return PendingIntent.getActivity(
+                context,
+                appWidgetId * 60 + 1,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
+        private fun nearMePendingIntent(context: Context, appWidgetId: Int): PendingIntent {
+            val intent = Intent(context, WidgetLocationActivity::class.java).apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            return PendingIntent.getActivity(
+                context,
+                appWidgetId * 60 + 2,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
+        private fun refreshPendingIntent(context: Context, appWidgetId: Int): PendingIntent {
+            val intent = Intent(context, MetroWidgetProvider::class.java).apply {
+                action = ACTION_REFRESH
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            }
+            return PendingIntent.getBroadcast(
+                context,
+                appWidgetId * 60 + 3,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
+        private fun catPokePendingIntent(context: Context, appWidgetId: Int): PendingIntent {
+            val intent = Intent(context, MetroWidgetProvider::class.java).apply {
+                action = ACTION_CAT_POKE
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+            }
+            return PendingIntent.getBroadcast(
+                context,
+                appWidgetId * 60 + 4,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
+        private fun reminderPendingIntent(
+            context: Context,
+            appWidgetId: Int,
+            cfg: WidgetConfig,
+            d: DepartureItem,
+            rowIndex: Int
+        ): PendingIntent {
+            val active = cfg.activeSlot
+            val intent = Intent(context, DepartureReminderActivity::class.java).apply {
+                putExtra(DepartureReminderActivity.EXTRA_WIDGET_ID, appWidgetId)
+                putExtra(DepartureReminderActivity.EXTRA_SLOT_INDEX, if (cfg.nearbyOverride != null) -1 else cfg.activeSlotIndex)
+                putExtra(DepartureReminderActivity.EXTRA_STATION_NAME, active.stationName)
+                putExtra(DepartureReminderActivity.EXTRA_DESIGNATION, d.designation)
+                putExtra(DepartureReminderActivity.EXTRA_DESTINATION, d.destination)
+                putExtra(DepartureReminderActivity.EXTRA_CLOCK_TIME, d.clockTime)
+                putExtra(DepartureReminderActivity.EXTRA_EXPECTED_EPOCH_MS, d.expectedEpochMs)
+                putExtra(DepartureReminderActivity.EXTRA_BADGE_STYLE, d.badgeStyle.name)
+                putExtra(DepartureReminderActivity.EXTRA_WALK_MINUTES, active.walkMinutes)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            return PendingIntent.getActivity(
+                context,
+                appWidgetId * 60 + 20 + rowIndex,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
         }
 
         private fun scheduleLocalRollover(context: Context, appWidgetId: Int, triggerAtEpochMs: Long) {
@@ -477,127 +823,18 @@ class MetroWidgetProvider : AppWidgetProvider() {
             }
             return PendingIntent.getBroadcast(
                 context,
-                appWidgetId * 50 + 49,
+                appWidgetId * 60 + 55,
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
         }
 
-        private fun buildBaseViews(context: Context, appWidgetId: Int, cfg: WidgetConfig): RemoteViews {
-            val views = RemoteViews(context.packageName, R.layout.widget_departures)
-            val active = cfg.activeSlot
-            views.setTextViewText(R.id.widget_station_name, "${active.stationName} ▾")
-
-            val bgAlpha = ((cfg.opacityPercent.coerceIn(0, 100) * 255) / 100)
-            val cardAlpha = if (cfg.opacityPercent == 0) 0 else ((bgAlpha * 0.85f).toInt().coerceAtLeast(36))
-            views.setInt(R.id.widget_bg_image, "setImageAlpha", bgAlpha)
-            views.setInt(R.id.widget_cat_bg, "setImageAlpha", cardAlpha)
-            for (rowBgId in ROW_BG_IDS) {
-                views.setInt(rowBgId, "setImageAlpha", cardAlpha)
-            }
-
-            val tabActiveText = ContextCompat.getColor(context, R.color.widget_tab_active_text)
-            val tabIdleText = ContextCompat.getColor(context, R.color.widget_text_secondary)
-
-            if (cfg.slots.size > 1) {
-                views.setViewVisibility(R.id.widget_tabs_bar, View.VISIBLE)
-                for (i in 0 until 3) {
-                    if (i < cfg.slots.size) {
-                        val slot = cfg.slots[i]
-                        val isSelected = i == cfg.activeSlotIndex
-                        views.setViewVisibility(TAB_IDS[i], View.VISIBLE)
-                        views.setTextViewText(TAB_IDS[i], shortenTabLabel(slot.stationName))
-                        views.setInt(
-                            TAB_IDS[i],
-                            "setBackgroundResource",
-                            if (isSelected) R.drawable.widget_tab_active else R.drawable.widget_tab_idle
-                        )
-                        views.setTextColor(TAB_IDS[i], if (isSelected) tabActiveText else tabIdleText)
-
-                        val tabIntent = Intent(context, MetroWidgetProvider::class.java).apply {
-                            action = ACTION_SELECT_SLOT
-                            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-                            putExtra(EXTRA_SLOT_INDEX, i)
-                            addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-                        }
-                        val tabPi = PendingIntent.getBroadcast(
-                            context,
-                            appWidgetId * 50 + 10 + i,
-                            tabIntent,
-                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                        )
-                        views.setOnClickPendingIntent(TAB_IDS[i], tabPi)
-                    } else {
-                        views.setViewVisibility(TAB_IDS[i], View.GONE)
-                    }
-                }
-            } else {
-                views.setViewVisibility(R.id.widget_tabs_bar, View.GONE)
-            }
-
-            // Tap ↻ -> foreground broadcast -> WorkManager/JobScheduler fetch
-            val refreshIntent = Intent(context, MetroWidgetProvider::class.java).apply {
-                action = ACTION_REFRESH
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            }
-            val refreshPi = PendingIntent.getBroadcast(
-                context,
-                appWidgetId * 50 + 1,
-                refreshIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setOnClickPendingIntent(R.id.widget_refresh_btn, refreshPi)
-
-            // Tap roaming cat -> cat poke + WorkManager/JobScheduler fetch
-            val catIntent = Intent(context, MetroWidgetProvider::class.java).apply {
-                action = ACTION_CAT_POKE
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-                addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
-            }
-            val catPi = PendingIntent.getBroadcast(
-                context,
-                appWidgetId * 50 + 5,
-                catIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setOnClickPendingIntent(R.id.widget_cat_empty, catPi)
-
-            val configIntent = Intent(context, WidgetConfigActivity::class.java).apply {
-                action = AppWidgetManager.ACTION_APPWIDGET_CONFIGURE
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            val configPi = PendingIntent.getActivity(
-                context,
-                appWidgetId * 50 + 2,
-                configIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setOnClickPendingIntent(R.id.widget_header_tap, configPi)
-
-            val launch3dIntent = Intent(context, MainActivity::class.java).apply {
-                putExtra(MainActivity.EXTRA_LAUNCH_SOURCE, "widget_3d")
-                putExtra(MainActivity.EXTRA_STATION_NAME, active.stationName)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            }
-            val launch3dPi = PendingIntent.getActivity(
-                context,
-                appWidgetId * 50 + 3,
-                launch3dIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setOnClickPendingIntent(R.id.widget_radar_btn, launch3dPi)
-            views.setOnClickPendingIntent(R.id.widget_status_text, launch3dPi)
-
-            return views
-        }
-
-        private fun shortenTabLabel(name: String): String {
+        fun shortenTabLabel(name: String): String {
             return name
                 .replace("Stockholms östra", "Sthlm Östra", ignoreCase = true)
                 .replace("Stockholm City", "Sthlm City", ignoreCase = true)
                 .replace("Stockholm Odenplan", "Odenplan", ignoreCase = true)
+                .replace("Stora Lappkärrsberget", "Stora Lappis", ignoreCase = true)
                 .replace("Lappkärrsberget", "Lappis", ignoreCase = true)
                 .replace("Tekniska högskolan", "Tekniska", ignoreCase = true)
                 .replace(" centrum", " C", ignoreCase = true)

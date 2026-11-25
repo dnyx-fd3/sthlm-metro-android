@@ -2,13 +2,13 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/config_row_bg"
+    android:background="@drawable/app_row_bg"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingStart="14dp"
-    android:paddingTop="11dp"
-    android:paddingEnd="14dp"
-    android:paddingBottom="11dp">
+    android:paddingStart="12dp"
+    android:paddingTop="10dp"
+    android:paddingEnd="12dp"
+    android:paddingBottom="10dp">
 
     <LinearLayout
         android:layout_width="0dp"
@@ -34,13 +34,11 @@
     </LinearLayout>
 
     <TextView
-        android:id="@+id/item_station_action"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:fontFamily="monospace"
-        android:text="SET →"
+        android:text="SET"
         android:textColor="@color/cyan_accent"
         android:textSize="11sp"
         android:textStyle="bold" />
-
 </LinearLayout>

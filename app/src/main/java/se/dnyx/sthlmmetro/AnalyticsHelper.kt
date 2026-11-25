@@ -16,11 +16,10 @@ object AnalyticsHelper {
 
     fun syncCollectionState(context: Context) {
         try {
-            val excluded = isDevExcluded(context)
             FirebaseAnalytics.getInstance(context.applicationContext)
-                .setAnalyticsCollectionEnabled(!excluded)
+                .setAnalyticsCollectionEnabled(!isDevExcluded(context))
         } catch (_: Exception) {
-            // Never crash if Play Services is unavailable
+            // Ignore
         }
     }
 
@@ -48,10 +47,9 @@ object AnalyticsHelper {
         val appCtx = context.applicationContext
         if (isDevExcluded(appCtx)) return
         try {
-            val bundle = Bundle().apply(fill)
-            FirebaseAnalytics.getInstance(appCtx).logEvent(eventName, bundle)
+            FirebaseAnalytics.getInstance(appCtx).logEvent(eventName, Bundle().apply(fill))
         } catch (_: Exception) {
-            // Never let analytics disrupt user actions
+            // Never disrupt user actions
         }
     }
 
@@ -60,26 +58,29 @@ object AnalyticsHelper {
         return if (trimmed.length <= maxLen) trimmed else trimmed.substring(0, maxLen)
     }
 
-    fun logRadarOpened(context: Context, source: String, stationName: String = "") {
-        log(context, "app_open_radar") {
+    fun logAppOpened(context: Context, source: String) {
+        log(context, "app_board_opened") {
             putString("source", clip(source, 40))
-            if (stationName.isNotEmpty()) putString("station_name", clip(stationName))
             putString("app_version", BuildConfig.VERSION_NAME)
-        }
-        if (source != "launcher") {
-            log(context, "widget_open_3d") {
-                putString("source", clip(source, 40))
-                if (stationName.isNotEmpty()) putString("station_name", clip(stationName))
-            }
         }
     }
 
-    fun logWidgetRefreshed(
-        context: Context,
-        slot: StationSlot,
-        slotIndex: Int,
-        trigger: String
-    ) {
+    fun logWeb3dOpened(context: Context, stationName: String, siteId: Int) {
+        log(context, "radar_3d_web_opened") {
+            putString("station_name", clip(stationName))
+            putLong("site_id", siteId.toLong())
+        }
+    }
+
+    fun logNearMeUsed(context: Context, source: String, stopName: String, walkMinutes: Int) {
+        log(context, "near_me_used") {
+            putString("source", clip(source, 24))
+            putString("station_name", clip(stopName))
+            putLong("walk_minutes", walkMinutes.toLong())
+        }
+    }
+
+    fun logWidgetRefreshed(context: Context, slot: StationSlot, slotIndex: Int, trigger: String) {
         log(context, "widget_refreshed") {
             putString("station_name", clip(slot.stationName))
             putLong("site_id", slot.siteId.toLong())
@@ -93,7 +94,6 @@ object AnalyticsHelper {
         log(context, "widget_tab_switched") {
             putString("station_name", clip(slot.stationName))
             putLong("site_id", slot.siteId.toLong())
-            putString("mode_filter", slot.filter.code)
             putLong("slot_index", (slotIndex + 1).toLong())
         }
     }
@@ -112,14 +112,8 @@ object AnalyticsHelper {
         }
     }
 
-    fun logDepartureTapped(
-        context: Context,
-        stationName: String,
-        lineNumber: String,
-        destination: String,
-        walkMinutes: Int
-    ) {
-        log(context, "widget_departure_tapped") {
+    fun logDepartureTapped(context: Context, stationName: String, lineNumber: String, destination: String, walkMinutes: Int) {
+        log(context, "departure_tapped") {
             putString("station_name", clip(stationName))
             putString("line_number", clip(lineNumber, 20))
             putString("destination", clip(destination))
@@ -127,15 +121,8 @@ object AnalyticsHelper {
         }
     }
 
-    fun logReminderSet(
-        context: Context,
-        stationName: String,
-        lineNumber: String,
-        destination: String,
-        walkMinutes: Int,
-        timerSeconds: Int
-    ) {
-        log(context, "widget_reminder_set") {
+    fun logReminderSet(context: Context, stationName: String, lineNumber: String, destination: String, walkMinutes: Int, timerSeconds: Int) {
+        log(context, "reminder_timer_set") {
             putString("station_name", clip(stationName))
             putString("line_number", clip(lineNumber, 20))
             putString("destination", clip(destination))
@@ -144,46 +131,32 @@ object AnalyticsHelper {
         }
     }
 
-    fun logStationPicked(context: Context, stationName: String, siteId: Int, slotIndex: Int) {
-        log(context, "widget_station_picked") {
-            putString("station_name", clip(stationName))
-            putLong("site_id", siteId.toLong())
-            putLong("slot_index", (slotIndex + 1).toLong())
-        }
-    }
-
-    fun logWidgetConfigured(context: Context, slots: List<StationSlot>, opacityPercent: Int) {
+    fun logWidgetConfigured(context: Context, slots: List<StationSlot>, opacityPercent: Int, theme: WidgetTheme) {
         log(context, "widget_configured") {
             putLong("stop_count", slots.size.toLong())
             putLong("opacity_pct", opacityPercent.toLong())
-            slots.getOrNull(0)?.let {
-                putString("station_name", clip(it.stationName))
-                putString("stop_1", clip(it.stationName))
-            }
-            slots.getOrNull(1)?.let { putString("stop_2", clip(it.stationName)) }
-            slots.getOrNull(2)?.let { putString("stop_3", clip(it.stationName)) }
+            putString("theme", theme.code)
+            slots.getOrNull(0)?.let { putString("station_name", clip(it.stationName)) }
+        }
+    }
+
+    fun logWidgetPinned(context: Context, style: String) {
+        log(context, "widget_pinned") {
+            putString("widget_style", clip(style, 24))
         }
     }
 
     fun logSlError(context: Context, slot: StationSlot, errorType: String) {
-        log(context, "widget_sl_error") {
+        log(context, "sl_api_error") {
             putString("station_name", clip(slot.stationName))
             putLong("site_id", slot.siteId.toLong())
             putString("error_type", clip(errorType, 30))
         }
     }
 
-    fun logUpdateDialogOpened(context: Context, source: String) {
+    fun logUpdateChecked(context: Context) {
         log(context, "app_update_checked") {
-            putString("source", clip(source, 30))
             putString("app_version", BuildConfig.VERSION_NAME)
-        }
-    }
-
-    fun logUpdateDownloadStarted(context: Context, tagName: String) {
-        log(context, "app_update_download") {
-            putString("target_tag", clip(tagName, 40))
-            putString("from_version", BuildConfig.VERSION_NAME)
         }
     }
 }

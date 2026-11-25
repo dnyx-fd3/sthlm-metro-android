@@ -25,6 +25,9 @@ data class DepartureItem(
     val clockTime: String,
     val expectedEpochMs: Long,
     val modeLabel: String,
+    val transportMode: String,
+    val stopPoint: String,
+    val directionCode: Int,
     val delayMinutes: Int,
     val cancelled: Boolean,
     val badgeStyle: LineBadgeStyle
@@ -33,7 +36,9 @@ data class DepartureItem(
 data class StationOption(
     val siteId: Int,
     val name: String,
-    val subtitle: String = ""
+    val subtitle: String = "",
+    val lat: Double = Double.NaN,
+    val lon: Double = Double.NaN
 )
 
 object SlApiClient {
@@ -47,20 +52,20 @@ object SlApiClient {
     )
 
     val POPULAR_STATIONS = listOf(
-        StationOption(9001, "T-Centralen", "Metro Red/Green/Blue · Pendeltåg"),
-        StationOption(9203, "Universitetet", "Metro Red 14 · Roslagsbanan · Bus 50"),
-        StationOption(9117, "Odenplan", "Metro Green · Pendeltåg · Buses"),
-        StationOption(9600, "Stockholms östra", "Roslagsbanan 27/28/29 · KTH"),
-        StationOption(9192, "Slussen", "Metro Red/Green · Buses"),
-        StationOption(9189, "Gullmarsplan", "Metro Green · Tvärbanan"),
-        StationOption(9220, "Ropsten", "Metro Red 13 · Lidingöbanan 21"),
-        StationOption(9293, "Liljeholmen", "Metro Red 13/14 · Tvärbanan"),
-        StationOption(9112, "Alvik", "Metro Green · Tvärbanan · Line 12"),
-        StationOption(9305, "Västra skogen", "Metro Blue 10/11"),
-        StationOption(9529, "Älvsjö", "Pendeltåg 40–48"),
-        StationOption(9509, "Solna", "Pendeltåg · Tvärbanan"),
-        StationOption(9109, "Brommaplan", "Metro Green · Buses"),
-        StationOption(7006, "Flemingsberg", "Pendeltåg · Campus")
+        StationOption(9001, "T-Centralen", "Metro · Pendeltåg", 59.3310, 18.0593),
+        StationOption(9203, "Universitetet", "Metro 14 · Roslagsbanan · Bus 50", 59.3656, 18.0550),
+        StationOption(9117, "Odenplan", "Metro · Pendeltåg · Bus", 59.3428, 18.0499),
+        StationOption(9600, "Stockholms östra", "Roslagsbanan · KTH", 59.3457, 18.0715),
+        StationOption(9192, "Slussen", "Metro Red/Green · Bus", 59.3195, 18.0722),
+        StationOption(9189, "Gullmarsplan", "Metro Green · Tvärbanan", 59.2989, 18.0810),
+        StationOption(9220, "Ropsten", "Metro 13 · Lidingöbanan", 59.3574, 18.1024),
+        StationOption(9293, "Liljeholmen", "Metro Red · Tvärbanan", 59.3106, 18.0227),
+        StationOption(9112, "Alvik", "Metro Green · Tvärbanan", 59.3335, 17.9806),
+        StationOption(9305, "Västra skogen", "Metro Blue 10/11", 59.3474, 18.0038),
+        StationOption(9529, "Älvsjö", "Pendeltåg 40–48", 59.2784, 18.0108),
+        StationOption(9509, "Solna", "Pendeltåg · Tvärbanan", 59.3653, 18.0099),
+        StationOption(9109, "Brommaplan", "Metro Green · Bus", 59.3385, 17.9396),
+        StationOption(7006, "Flemingsberg", "Pendeltåg · Campus", 59.2185, 17.9467)
     )
 
     private fun httpGet(urlStr: String, timeoutMs: Int = 12000): String {
@@ -75,12 +80,8 @@ object SlApiClient {
         }
         try {
             val code = conn.responseCode
-            if (code == 429) {
-                throw SlRateLimitException()
-            }
-            if (code !in 200..299) {
-                throw SlHttpException(code)
-            }
+            if (code == 429) throw SlRateLimitException()
+            if (code !in 200..299) throw SlHttpException(code)
             BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8)).use { reader ->
                 val sb = StringBuilder()
                 var line = reader.readLine()
@@ -95,14 +96,12 @@ object SlApiClient {
         }
     }
 
-    fun fetchDepartures(siteId: Int, filter: ModeFilter, limit: Int = 20): List<DepartureItem> {
+    fun fetchDepartures(siteId: Int, filter: ModeFilter, limit: Int = 24): List<DepartureItem> {
         val raw = httpGet("$BASE_URL/sites/$siteId/departures?forecast=45")
         val root = JSONObject(raw)
         val arr = root.optJSONArray("departures") ?: return emptyList()
 
-        data class ParsedDep(val mode: String, val item: DepartureItem)
-        val allItems = mutableListOf<ParsedDep>()
-
+        val allItems = mutableListOf<DepartureItem>()
         for (i in 0 until arr.length()) {
             val obj = arr.optJSONObject(i) ?: continue
             val line = obj.optJSONObject("line") ?: continue
@@ -114,6 +113,9 @@ object SlApiClient {
             val scheduled = obj.optString("scheduled", expected)
             val state = obj.optString("state", "").uppercase()
             val cancelled = state == "CANCELLED"
+            val dirCode = obj.optInt("direction_code", 0)
+            val stopPointObj = obj.optJSONObject("stop_point")
+            val stopPoint = stopPointObj?.optString("designation", "").orEmpty().trim()
 
             val effectiveIso = expected.ifEmpty { scheduled }
             val expectedEpochMs = parseStockholmEpochMs(effectiveIso)
@@ -130,33 +132,34 @@ object SlApiClient {
             val modeLabel = resolveModeLabel(mode, designation)
 
             allItems.add(
-                ParsedDep(
-                    mode = mode,
-                    item = DepartureItem(
-                        designation = designation.ifEmpty { "SL" },
-                        destination = destination.ifEmpty { "Stockholm" },
-                        display = display,
-                        clockTime = clockTime,
-                        expectedEpochMs = expectedEpochMs,
-                        modeLabel = modeLabel,
-                        delayMinutes = delayMin,
-                        cancelled = cancelled,
-                        badgeStyle = badgeStyle
-                    )
+                DepartureItem(
+                    designation = designation.ifEmpty { "SL" },
+                    destination = destination.ifEmpty { "Stockholm" },
+                    display = display,
+                    clockTime = clockTime,
+                    expectedEpochMs = expectedEpochMs,
+                    modeLabel = modeLabel,
+                    transportMode = mode,
+                    stopPoint = stopPoint,
+                    directionCode = dirCode,
+                    delayMinutes = delayMin,
+                    cancelled = cancelled,
+                    badgeStyle = badgeStyle
                 )
             )
         }
 
         val railModes = setOf("METRO", "TRAIN", "TRAM")
         val filtered = when (filter) {
-            ModeFilter.ALL -> allItems.map { it.item }
-            ModeFilter.BUS -> allItems.filter { it.mode == "BUS" }.map { it.item }
+            ModeFilter.ALL -> allItems
+            ModeFilter.METRO -> allItems.filter { it.transportMode == "METRO" }
+            ModeFilter.BUS -> allItems.filter { it.transportMode == "BUS" }
             ModeFilter.PENDEL -> allItems.filter {
-                it.mode == "TRAIN" && it.item.badgeStyle == LineBadgeStyle.PENDEL
-            }.map { it.item }
+                it.transportMode == "TRAIN" && it.badgeStyle == LineBadgeStyle.PENDEL
+            }
             ModeFilter.AUTO -> {
-                val railOnly = allItems.filter { it.mode in railModes }.map { it.item }
-                if (railOnly.isNotEmpty()) railOnly else allItems.map { it.item }
+                val railOnly = allItems.filter { it.transportMode in railModes }
+                if (railOnly.isNotEmpty()) railOnly else allItems
             }
         }
         return filtered.sortedBy { if (it.expectedEpochMs > 0L) it.expectedEpochMs else Long.MAX_VALUE }.take(limit)
@@ -171,7 +174,9 @@ object SlApiClient {
             val id = obj.optInt("id", -1)
             val name = obj.optString("name", "").trim()
             if (id > 0 && name.isNotEmpty()) {
-                out.add(StationOption(id, name, "SL Site #$id"))
+                val lat = obj.optDouble("lat", Double.NaN)
+                val lon = obj.optDouble("lon", Double.NaN)
+                out.add(StationOption(id, name, "SL #$id", lat, lon))
             }
         }
         return out
