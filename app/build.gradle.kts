@@ -15,11 +15,12 @@ android {
         minSdk = 26
         targetSdk = 35
         val ciRun = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()
-        versionCode = if (ciRun != null) 100 + ciRun else 9
-        versionName = "2.1.0"
+        versionCode = if (ciRun != null) 100 + ciRun else 10
+        versionName = "2.2.0"
 
         buildConfigField("long", "BUILD_TIME_MS", "${System.currentTimeMillis()}L")
         buildConfigField("String", "GITHUB_REPO", "\"dnyx-fd3/sthlm-metro-android\"")
+        buildConfigField("String", "RADAR_API_URL", "\"https://sthlm-radar-api.dnyashasvi18-99.workers.dev\"")
     }
 
     signingConfigs {

@@ -10,6 +10,7 @@ import java.time.Duration
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.util.concurrent.ConcurrentHashMap
 
 class SlRateLimitException : Exception("SL HTTP 429 rate limit")
 class SlHttpException(val statusCode: Int) : Exception("SL HTTP $statusCode")
@@ -66,9 +67,16 @@ data class StationOption(
 )
 
 object SlApiClient {
-    private const val BASE_URL = "https://transport.integration.sl.se/v1"
+    private val WORKER_BASE_URL = "${BuildConfig.RADAR_API_URL.trimEnd('/')}/v1"
+    private const val DIRECT_SL_BASE_URL = "https://transport.integration.sl.se/v1"
     private const val DEVIATIONS_URL = "https://deviations.integration.sl.se/v1/messages"
     private val STOCKHOLM_ZONE = ZoneId.of("Europe/Stockholm")
+
+    @Volatile
+    var lastSource: String = "edge"
+        private set
+
+    private val cachedStopDeviations = ConcurrentHashMap<Int, List<SlDeviation>>()
 
     private val BLUE_TRUNK_BUSES = setOf(
         "1", "2", "3", "4", "6",
@@ -96,14 +104,15 @@ object SlApiClient {
     private val POPULAR_MODES_BY_ID: Map<Int, Set<String>> =
         POPULAR_STATIONS.associate { it.siteId to it.modes }
 
-    private fun httpGet(urlStr: String, timeoutMs: Int = 12000): String {
+    private fun httpGet(urlStr: String, timeoutMs: Int = 12000, keepAlive: Boolean = false): String {
         val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = timeoutMs
             readTimeout = timeoutMs
-            useCaches = false
             setRequestProperty("Accept", "application/json")
-            setRequestProperty("Connection", "close")
+            if (!keepAlive) {
+                setRequestProperty("Connection", "close")
+            }
             setRequestProperty("User-Agent", "TRadarAndroid/${BuildConfig.VERSION_NAME}")
         }
         try {
@@ -120,13 +129,29 @@ object SlApiClient {
                 return sb.toString()
             }
         } finally {
-            conn.disconnect()
+            if (!keepAlive) {
+                conn.disconnect()
+            }
+        }
+    }
+
+    private fun fetchDeparturesRaw(siteId: Int): String {
+        val path = "/sites/$siteId/departures?forecast=45"
+        return try {
+            val res = httpGet("$WORKER_BASE_URL$path", timeoutMs = 8000, keepAlive = true)
+            lastSource = "edge"
+            res
+        } catch (_: Exception) {
+            val res = httpGet("$DIRECT_SL_BASE_URL$path", timeoutMs = 12000, keepAlive = false)
+            lastSource = "direct"
+            res
         }
     }
 
     fun fetchDepartures(siteId: Int, filter: ModeFilter, limit: Int = 24): List<DepartureItem> {
-        val raw = httpGet("$BASE_URL/sites/$siteId/departures?forecast=45")
+        val raw = fetchDeparturesRaw(siteId)
         val root = JSONObject(raw)
+        cacheStopDeviationsFromPayload(siteId, root.optJSONArray("stop_deviations"))
         val arr = root.optJSONArray("departures") ?: return emptyList()
 
         val allItems = mutableListOf<DepartureItem>()
@@ -198,11 +223,35 @@ object SlApiClient {
         return filtered.sortedBy { if (it.expectedEpochMs > 0L) it.expectedEpochMs else Long.MAX_VALUE }.take(limit)
     }
 
+    private fun cacheStopDeviationsFromPayload(siteId: Int, stopDevs: JSONArray?) {
+        if (stopDevs == null || stopDevs.length() == 0) {
+            cachedStopDeviations.remove(siteId)
+            return
+        }
+        val list = mutableListOf<SlDeviation>()
+        val seen = HashSet<String>()
+        for (i in 0 until stopDevs.length()) {
+            val sd = stopDevs.optJSONObject(i) ?: continue
+            val msg = if (!sd.isNull("message")) sd.optString("message", "").trim() else ""
+            if (msg.isNotEmpty() && seen.add(msg.lowercase())) {
+                val firstLine = msg.lineSequence().firstOrNull()?.trim().orEmpty().ifEmpty { msg }
+                val header = if (firstLine.length > 90) firstLine.take(87) + "…" else firstLine
+                list.add(SlDeviation(header = header, details = msg, scopeLabel = "Stop alert"))
+            }
+            if (list.size >= 3) break
+        }
+        if (list.isNotEmpty()) {
+            cachedStopDeviations[siteId] = list
+        } else {
+            cachedStopDeviations.remove(siteId)
+        }
+    }
+
     fun fetchAllSites(): List<StationOption> {
         val raw = try {
-            httpGet("$BASE_URL/sites?expand=true", timeoutMs = 20000)
+            httpGet("$DIRECT_SL_BASE_URL/sites?expand=true", timeoutMs = 20000)
         } catch (_: Exception) {
-            httpGet("$BASE_URL/sites", timeoutMs = 15000)
+            httpGet("$DIRECT_SL_BASE_URL/sites", timeoutMs = 15000)
         }
         val arr = JSONArray(raw)
         val out = ArrayList<StationOption>(arr.length())
@@ -238,11 +287,24 @@ object SlApiClient {
     fun fetchSiteDeviations(siteIds: List<Int>): List<SlDeviation> {
         val cleanIds = siteIds.filter { it > 0 }.distinct().take(4)
         if (cleanIds.isEmpty()) return emptyList()
-        val siteParams = cleanIds.joinToString("&") { "site=$it" }
-        val raw = httpGet("$DEVIATIONS_URL?future=false&$siteParams", timeoutMs = 8000)
-        val arr = JSONArray(raw)
         val seenHeaders = HashSet<String>()
         val results = mutableListOf<SlDeviation>()
+
+        val raw = try {
+            val siteParams = cleanIds.joinToString("&") { "site=$it" }
+            httpGet("$DEVIATIONS_URL?future=false&$siteParams", timeoutMs = 8000)
+        } catch (_: Exception) {
+            null
+        }
+        val arr = if (raw != null) {
+            try {
+                JSONArray(raw)
+            } catch (_: Exception) {
+                JSONArray()
+            }
+        } else {
+            JSONArray()
+        }
 
         for (i in 0 until arr.length()) {
             val obj = arr.optJSONObject(i) ?: continue
@@ -299,6 +361,18 @@ object SlApiClient {
                 results.add(SlDeviation(header = header, details = details, scopeLabel = scopeAlias))
             }
             if (results.size >= 5) break
+        }
+
+        if (results.size < 5) {
+            for (id in cleanIds) {
+                for (sd in cachedStopDeviations[id].orEmpty()) {
+                    if (seenHeaders.add(sd.header.lowercase())) {
+                        results.add(sd)
+                    }
+                    if (results.size >= 5) break
+                }
+                if (results.size >= 5) break
+            }
         }
         return results
     }
